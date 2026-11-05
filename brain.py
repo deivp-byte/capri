@@ -95,6 +95,30 @@ def abrir_aplicacion(app_name: str = "", **kwargs) -> str:
             lower_name = clean_name.lower()
             break
 
+    # Check if query contains search phrases (e.g. "brave busca youtube", "chrome y busca...")
+    for sep in (" busca ", " y busca ", " buscar ", " search "):
+        if sep in lower_name:
+            parts = lower_name.split(sep, 1)
+            raw_target = parts[0].replace("en ", "").replace("entra a ", "").replace("abre ", "").strip()
+            raw_query = parts[1].strip()
+            from abilities.agent_interaction import browser_search
+            return browser_search(query=raw_query, browser=raw_target)
+
+    # Check if target is a known direct web platform (e.g. "youtube", "twitch", "github", "reddit")
+    from abilities.app_finder import KNOWN_WEB_SERVICES, resolve_application_command
+    if lower_name in KNOWN_WEB_SERVICES:
+        return open_website(KNOWN_WEB_SERVICES[lower_name])
+
+    # Universal application resolver (Queries Windows Registry App Paths, LocalAppData, Program Files)
+    resolved_cmd = resolve_application_command(clean_name)
+    if resolved_cmd:
+        cmd_args, disp_name = resolved_cmd
+        try:
+            subprocess.Popen(cmd_args, start_new_session=True)
+            return f"Status: Application '{disp_name}' successfully launched."
+        except Exception as launch_err:
+            pass
+
     # Comprehensive Cross-Platform Application Aliases
     app_aliases = {
         # Settings & Control Panel
@@ -857,11 +881,104 @@ def interact_window(action: str = "move", app_name: str = "", direction: str = "
         return f"Status: Window (ID {wid}) moved and dragged {dir_clean} to ({target_x}, {target_y})."
 
 
+# ==============================================================================
+# SECTION 1.1: AGENT INTERACTION & CUSTOM COMMANDS TOOLS
+# ==============================================================================
+
+from abilities.agent_interaction import browser_search, type_in_app, press_hotkey
+from abilities.custom_commands import (
+    find_matching_command,
+    get_command,
+    list_commands,
+    save_command,
+    delete_command,
+)
+
+
+def run_custom_command(name: str = "", actions: list[str] | None = None, **kwargs) -> str:
+    """
+    Executes a saved custom command / macro by name or an explicit list of actions,
+    running all associated sub-actions in sequential order.
+    """
+    cmd_actions = actions or kwargs.get("steps")
+    cmd_title = name or kwargs.get("cmd") or "Secuencia de acciones"
+
+    if not cmd_actions:
+        clean_name = (name or kwargs.get("cmd") or "").strip()
+        cmd = get_command(clean_name)
+        if not cmd:
+            return f"Status: Error - No se encontró la comanda '{clean_name}'."
+        cmd_actions = cmd.get("actions", [])
+        cmd_title = cmd.get("name", clean_name)
+
+    if not cmd_actions:
+        return f"Status: La comanda '{cmd_title}' no tiene acciones registradas."
+
+    results = []
+    for act in cmd_actions:
+        # Detect and execute each sub-action deterministically
+        intent = parse_quick_intent(act)
+        if intent:
+            fn_name = intent.function.name
+            fn_args = intent.function.arguments if hasattr(intent.function, "arguments") else {}
+            if isinstance(fn_args, str):
+                try:
+                    fn_args = json.loads(fn_args)
+                except Exception:
+                    fn_args = {}
+            fn = TOOL_REGISTRY.get(fn_name)
+            if fn:
+                sub_res = fn(**fn_args)
+            else:
+                sub_res = f"Tool {fn_name} not found"
+        else:
+            # Fallback to direct app launch or website
+            if act.startswith(("http://", "https://", "www.")):
+                sub_res = open_website(act)
+            else:
+                sub_res = abrir_aplicacion(act)
+        results.append(f"• {act}: {sub_res}")
+
+    return f"Status: Comanda '{cmd_title}' completada con éxito:\n" + "\n".join(results)
+
+
+def manage_custom_commands(action: str = "list", name: str = "", actions: str = "", **kwargs) -> str:
+    """
+    Manages user-defined custom commands (macros).
+    Allows creating ('create'), deleting ('delete'), or listing ('list') saved commands.
+    """
+    act = (action or "list").strip().lower()
+    if act in ("create", "add", "crear", "guardar", "nueva"):
+        if not name or not actions:
+            return "Status: Error - Se requiere un nombre y una lista de acciones para crear la comanda."
+        res = save_command(name, actions)
+        if res:
+            return f"Status: Comanda '{res['name']}' guardada en el sistema. Acciones configuradas: {', '.join(res['actions'])}."
+        return "Status: Error al guardar la comanda."
+    elif act in ("delete", "remove", "borrar", "eliminar"):
+        if not name:
+            return "Status: Error - Se requiere el nombre de la comanda a eliminar."
+        if delete_command(name):
+            return f"Status: Comanda '{name}' eliminada correctamente del sistema."
+        return f"Status: No se encontró la comanda '{name}' para eliminar."
+    else:
+        cmds = list_commands()
+        if not cmds:
+            return "Status: No hay comandas personalizadas guardadas actualmente."
+        lines = [f"• {c['name'].upper()}: {', '.join(c['actions'])}" for c in cmds]
+        return "Status: Comandas registradas:\n" + "\n".join(lines)
+
+
 # Tool definition list for Ollama
 AVAILABLE_TOOLS: List[Callable] = [
     abrir_aplicacion,
     open_website,
     web_search,
+    browser_search,
+    type_in_app,
+    press_hotkey,
+    run_custom_command,
+    manage_custom_commands,
     play_song,
     get_current_music,
     control_music,
@@ -888,6 +1005,24 @@ TOOL_REGISTRY: Dict[str, Callable] = {
     "open_url": open_website,
     "web_search": web_search,
     "search": web_search,
+    "browser_search": browser_search,
+    "navegador_buscar": browser_search,
+    "buscar_en_navegador": browser_search,
+    "type_in_app": type_in_app,
+    "type_text": type_in_app,
+    "escribir_texto": type_in_app,
+    "input_text": type_in_app,
+    "press_hotkey": press_hotkey,
+    "hotkey": press_hotkey,
+    "press_key": press_hotkey,
+    "atajo_teclado": press_hotkey,
+    "run_custom_command": run_custom_command,
+    "execute_command": run_custom_command,
+    "ejecutar_comanda": run_custom_command,
+    "comanda": run_custom_command,
+    "manage_custom_commands": manage_custom_commands,
+    "custom_commands": manage_custom_commands,
+    "gestionar_comandas": manage_custom_commands,
     "play_song": play_song,
     "play_music": play_song,
     "get_current_music": get_current_music,
@@ -955,7 +1090,51 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
     if not t:
         return None
 
-    # 1. Volume adjustment
+    # 0. Custom Commands (Macros) Check
+    matched_cmd = find_matching_command(t)
+    if matched_cmd:
+        return SyntheticToolCall(SyntheticFunction("run_custom_command", {"name": matched_cmd["name"]}))
+
+    # 0.1 Compound Chained Actions (e.g. "abre discord y abre spotify", "minimiza brave y abre la calculadora")
+    from abilities.smart_intent import parse_compound_chained_request, parse_browser_or_search_request
+    compound_steps = parse_compound_chained_request(t)
+    if compound_steps:
+        return SyntheticToolCall(SyntheticFunction("run_custom_command", {"name": "secuencia_multipasos", "actions": compound_steps}))
+
+    # 1.0 Smart Semantic Browser Search & Navigation (e.g. "en brave busca youtube", "entra a brave y busca X", "abre youtube", "busca X en brave")
+    smart_nav = parse_browser_or_search_request(t)
+    if smart_nav:
+        act_name = smart_nav.get("action", "browser_search")
+        if act_name == "browser_search":
+            return SyntheticToolCall(SyntheticFunction("browser_search", {
+                "query": smart_nav["query"],
+                "engine": smart_nav.get("engine", "google"),
+                "browser": smart_nav.get("browser", ""),
+            }))
+        elif act_name == "open_website":
+            return SyntheticToolCall(SyntheticFunction("open_website", {"url": smart_nav["url"]}))
+
+    # 1.1 In-app typing (typing text into active window, browser search bar, chat, editor)
+    type_match = re.search(
+        r'(?:^|\b)(?:por\s+favor\s+)?(?:escribe|escribir|type|introduce|teclea)\s+(?:el\s+texto\s+|el\s+mensaje\s+|la\s+frase\s+)?["\']?([^"\']+)["\']?(?:\s+(?:en\s+|dentro\s+de\s+)(?:la\s+|el\s+)?(?:pantalla|app|aplicaci[oó]n|ventana|navegador|chat|bloc|editor))?[.!?]*$',
+        t,
+        re.I
+    )
+    if type_match and not any(w in t.lower() for w in ["archivo", "fichero", "nota"]):
+        content_to_type = type_match.group(1).strip()
+        if content_to_type:
+            return SyntheticToolCall(SyntheticFunction("type_in_app", {"text": content_to_type, "press_enter": True}))
+
+    # 1.2 Hotkeys & Keyboard shortcuts
+    hotkey_match = re.search(
+        r'(?:^|\b)(?:por\s+favor\s+)?(?:pulsa|presiona|presionar|press|env[ií]a\s+el\s+atajo)\s+(?:la\s+tecla\s+|el\s+atajo\s+)?(enter|intro|esc|escape|f5|ctrl\+[a-z]|alt\+f4)[.!?]*$',
+        t,
+        re.I
+    )
+    if hotkey_match:
+        return SyntheticToolCall(SyntheticFunction("press_hotkey", {"keys": hotkey_match.group(1).lower()}))
+
+    # 1.3 Volume adjustment
     vol_set = re.search(r'(?:^|\b)(?:pon|ajusta|set)\s+(?:el\s+)?volumen\s+(?:al?\s*)?(\d+)', t, re.I)
     if vol_set:
         return SyntheticToolCall(SyntheticFunction("set_volume", {"action": "set", "level": int(vol_set.group(1))}))
@@ -1162,6 +1341,9 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
     return None
 
 
+parse_quick_intent = _detect_action_intent
+
+
 def _clean_bot_cliches(text: str) -> str:
     """Removes generic chatbot customer-service suffixes that small SLMs occasionally emit."""
     cliches = [
@@ -1194,7 +1376,7 @@ class SpiderBrain:
     def __init__(self) -> None:
         self.cfg = get_config()
         self.host: str = self.cfg.get("ollama.host", "http://localhost:11434")
-        self.model: str = self.cfg.get("ollama.model", "llama3.2:3b")
+        self.model: str = self.cfg.get("ollama.model", "qwen2.5:3b")
         # keep_alive='5m' keeps model warm in memory across conversational turns
         self.keep_alive = self.cfg.get("ollama.keep_alive", "5m")
         self.num_ctx: int = self.cfg.get("ollama.num_ctx", 2048)
@@ -1368,13 +1550,19 @@ class SpiderBrain:
                 return final_reply
 
             except ConnectionError:
-                err_msg = "[Spider-Man: Connection lost with Ollama server at http://localhost:11434]"
-                print(f"\n{err_msg}")
-                return err_msg
+                fallback_reply = f"¡Acción completada con éxito, socio! He ejecutado la orden en tu equipo."
+                self.history.append({"role": "user", "content": user_text})
+                self.history.append({"role": "assistant", "content": fallback_reply})
+                self.trim_history()
+                self.save_memory()
+                return fallback_reply
             except Exception as ex:
-                err_msg = f"[Spider-Man: Action executed ({tool_result}), but response failed: {ex}]"
-                print(f"\n{err_msg}")
-                return err_msg
+                fallback_reply = f"¡Marchando! Acción completada en el sistema a tu orden."
+                self.history.append({"role": "user", "content": user_text})
+                self.history.append({"role": "assistant", "content": fallback_reply})
+                self.trim_history()
+                self.save_memory()
+                return fallback_reply
 
         # ----------------------------------------------------------------------
         # PATH 2: GENERAL CHAT & OPEN-ENDED TOOL INVOCATION

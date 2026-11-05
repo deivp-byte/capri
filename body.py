@@ -303,12 +303,18 @@ class SpiderWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
 
+        # Critical: Prevent Qt from auto-quitting when secondary dialogs or menus close
+        _app = QApplication.instance()
+        if _app:
+            _app.setQuitOnLastWindowClosed(False)
+
         # Initialize Brain & Memory
         self.brain = SpiderBrain()
 
         # Window drag tracking state
         self._drag_pos: QPoint | None = None
         self._current_worker: BrainWorker | None = None
+        self._commands_dialog = None
 
         # Setup 30-animation sprite engine
         sprites_dir = Path(__file__).resolve().parent / "assets" / "sprites" / "spiderman"
@@ -728,6 +734,11 @@ class SpiderWindow(QWidget):
 
         menu.addSeparator()
 
+        cmd_act = menu.addAction("⚡ Comandas personalizadas (Macros)...")
+        cmd_act.triggered.connect(self._open_commands_dialog)
+
+        menu.addSeparator()
+
         quit_act = menu.addAction("❌ Salir")
         quit_act.triggered.connect(self.close)
 
@@ -747,6 +758,18 @@ class SpiderWindow(QWidget):
         floor_y = self.get_floor_y()
         self.move(self.x(), floor_y)
         self.animator.set_state("land")
+
+    def _open_commands_dialog(self) -> None:
+        """Opens the custom commands / macros management dialog in a non-blocking floating window."""
+        from dialogs.commands_dialog import SpiderCommandsDialog
+        if self._commands_dialog is None:
+            self._commands_dialog = SpiderCommandsDialog(parent=None)
+            self._commands_dialog.command_executed.connect(self._handle_user_submit)
+        else:
+            self._commands_dialog._refresh_list()
+        self._commands_dialog.show()
+        self._commands_dialog.raise_()
+        self._commands_dialog.activateWindow()
 
     # --------------------------------------------------------------------------
     # AUTONOMOUS LIFE & ROAMING ENGINE
@@ -1304,6 +1327,8 @@ class SpiderWindow(QWidget):
         self._choreo_timer.stop()
         self._roam_eval_timer.stop()
         self._roam_motion_timer.stop()
+        if self._commands_dialog:
+            self._commands_dialog.close()
         self.web_overlay.close()
         self.bubble.close()
         self.brain.save_memory()
@@ -1409,6 +1434,8 @@ CapriWindow = SpiderWindow
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    # Ensure secondary dialog closures do not terminate the desktop pet
+    app.setQuitOnLastWindowClosed(False)
     window = SpiderWindow()
     window.show()
     # Show initial greeting in speech bubble
