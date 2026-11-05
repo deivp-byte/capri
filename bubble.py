@@ -15,8 +15,8 @@ clean PySide6 architecture:
 from __future__ import annotations
 
 import time
-from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QKeyEvent, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QLineEdit, QWidget
 
 
@@ -113,6 +113,24 @@ class SpiderBubble(QWidget):
             }
         """)
         self.edit.returnPressed.connect(self._on_submit)
+        self.edit.installEventFilter(self)
+
+    def eventFilter(self, obj, event):
+        """Intercepts Escape key from QLineEdit input field to trigger instant task cancel."""
+        if obj == self.edit and event.type() == QEvent.KeyPress and event.key() == Qt.Key_Escape:
+            if hasattr(self.parent_pet, "_cancel_active_tasks"):
+                self.parent_pet._cancel_active_tasks()
+            return True
+        return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Escape key aborts ongoing background tasks."""
+        if event.key() == Qt.Key_Escape:
+            if hasattr(self.parent_pet, "_cancel_active_tasks"):
+                self.parent_pet._cancel_active_tasks()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def _on_submit(self) -> None:
         """Handles user enter key in the speech bubble's input field."""

@@ -23,6 +23,12 @@ htmlcov/
 # Local configuration and runtime data
 data/*.json
 data/*.log
+data/captures/
+test_new_features.py
+test_perch_tracking.py
+test_agent_features.py
+test_dialog_lifecycle.py
+test_semantic_comprehension.py
 
 # IDE and editor files
 .vscode/

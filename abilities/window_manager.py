@@ -276,22 +276,92 @@ def _close_window_x11(wid: int) -> bool:
 # WINDOWS WIN32 FALLBACK IMPLEMENTATION
 # ==============================================================================
 
-def _get_active_or_target_win32(app_name: str = "") -> Optional[Tuple[int, Tuple[int, int, int, int]]]:
-    """Windows ctypes fallback for window identification and geometry."""
+def _get_input_desktop_win32():
+    """Ensures thread attachment to active interactive desktop session on Windows."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        input_desk = user32.OpenInputDesktop(0, False, 0x01FF)
+        if input_desk:
+            user32.SetThreadDesktop(input_desk)
+        return input_desk
+    except Exception:
+        return None
+
+
+def _get_window_bounds_win32(hwnd: int) -> Optional[Tuple[int, int, int, int]]:
+    """Gets accurate window bounds using DwmGetWindowAttribute (excluding invisible margins)."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        dwmapi = ctypes.windll.dwmapi
+        user32 = ctypes.windll.user32
+
+        rect = wintypes.RECT()
+        DWMWA_EXTENDED_FRAME_BOUNDS = 9
+        res = dwmapi.DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, ctypes.byref(rect), ctypes.sizeof(rect))
+        if res == 0:
+            w = rect.right - rect.left
+            h = rect.bottom - rect.top
+            return (rect.left, rect.top, w, h)
+
+        # Fallback to standard GetWindowRect
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        w = max(100, rect.right - rect.left)
+        h = max(100, rect.bottom - rect.top)
+        return (rect.left, rect.top, w, h)
+    except Exception:
+        return None
+
+
+def _is_window_valid_app_win32(hwnd: int, user32, dwmapi, exclude_hwnds: set[int] = None) -> bool:
+    """Verifies that an HWND represents an active, visible, non-cloaked desktop application window."""
+    if not hwnd or (exclude_hwnds and hwnd in exclude_hwnds):
+        return False
+    if not user32.IsWindow(hwnd) or not user32.IsWindowVisible(hwnd) or user32.IsIconic(hwnd):
+        return False
+
+    # Check for cloaked window (DWMWA_CLOAKED = 14)
+    import ctypes
+    cloaked = ctypes.c_int(0)
+    dwmapi.DwmGetWindowAttribute(hwnd, 14, ctypes.byref(cloaked), ctypes.sizeof(cloaked))
+    if cloaked.value != 0:
+        return False
+
+    # Check class name
+    class_buf = ctypes.create_unicode_buffer(256)
+    user32.GetClassNameW(hwnd, class_buf, 256)
+    cls_name = class_buf.value
+    shell_classes = {
+        "Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd",
+        "Windows.UI.Core.CoreWindow", "XamlExplorerHostIslandWindow",
+        "#32768", "tooltips_class32"
+    }
+    if cls_name in shell_classes:
+        return False
+
+    return True
+
+
+def _get_active_or_target_win32(app_name: str = "", exclude_hwnds: set[int] = None) -> Optional[Tuple[int, Tuple[int, int, int, int]]]:
+    """Windows ctypes implementation for window identification and accurate geometry."""
     try:
         import ctypes
         from ctypes import wintypes
 
         user32 = ctypes.windll.user32
-        target_hwnd = 0
+        dwmapi = ctypes.windll.dwmapi
+        _get_input_desktop_win32()
 
         variants = _normalize_app_query(app_name) if app_name else []
+        target_hwnd = 0
 
+        # If specific app name is requested, search enumerated windows
         if variants:
             found_windows: list[int] = []
 
             def _enum_callback(hwnd, _):
-                if user32.IsWindowVisible(hwnd):
+                if _is_window_valid_app_win32(hwnd, user32, dwmapi, exclude_hwnds):
                     length = user32.GetWindowTextLengthW(hwnd)
                     if length > 0:
                         buff = ctypes.create_unicode_buffer(length + 1)
@@ -301,22 +371,43 @@ def _get_active_or_target_win32(app_name: str = "") -> Optional[Tuple[int, Tuple
                             found_windows.append(hwnd)
                 return True
 
-            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+            WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
             user32.EnumWindows(WNDENUMPROC(_enum_callback), 0)
             if found_windows:
                 target_hwnd = found_windows[0]
 
+        # If no specific app requested, first check foreground window
         if not target_hwnd:
-            target_hwnd = user32.GetForegroundWindow()
+            fg = user32.GetForegroundWindow()
+            if _is_window_valid_app_win32(fg, user32, dwmapi, exclude_hwnds):
+                target_hwnd = fg
+
+        # If foreground is invalid, our own window, or shell, pick the topmost valid app window
+        if not target_hwnd:
+            topmost: list[int] = []
+
+            def _top_cb(hwnd, _):
+                if _is_window_valid_app_win32(hwnd, user32, dwmapi, exclude_hwnds):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        bounds = _get_window_bounds_win32(hwnd)
+                        if bounds and bounds[2] >= 250 and bounds[3] >= 200:
+                            topmost.append(hwnd)
+                            return False  # stop enumeration on first match
+                return True
+
+            WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            user32.EnumWindows(WNDENUMPROC(_top_cb), 0)
+            if topmost:
+                target_hwnd = topmost[0]
 
         if not target_hwnd:
             return None
 
-        rect = wintypes.RECT()
-        user32.GetWindowRect(target_hwnd, ctypes.byref(rect))
-        w = max(100, rect.right - rect.left)
-        h = max(100, rect.bottom - rect.top)
-        return int(target_hwnd), (rect.left, rect.top, w, h)
+        bounds = _get_window_bounds_win32(target_hwnd)
+        if bounds:
+            return int(target_hwnd), bounds
+        return None
     except Exception:
         return None
 
@@ -519,6 +610,57 @@ def restore_window(wid: int) -> bool:
     elif sys.platform == "win32":
         return _restore_window_win32(wid)
     return False
+
+
+def get_window_title(wid: int) -> str:
+    """Returns the title of the window identified by wid."""
+    if wid in _SIMULATED_WINDOWS:
+        return _SIMULATED_WINDOWS[wid].get("title", "")
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            length = user32.GetWindowTextLengthW(wid)
+            if length > 0:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(wid, buf, length + 1)
+                return buf.value
+        except Exception:
+            pass
+    elif _XLIB_AVAILABLE and _DISPLAY:
+        try:
+            w = _DISPLAY.create_resource_object("window", wid)
+            return _get_x11_window_name(w)
+        except Exception:
+            pass
+    return ""
+
+
+def get_topmost_app_window(exclude_hwnds: set[int] = None) -> Optional[Tuple[int, str, Tuple[int, int, int, int]]]:
+    """
+    Finds the topmost visible application window on the desktop.
+
+    Returns:
+        (wid, title, (x, y, width, height)) or None
+    """
+    if sys.platform == "win32":
+        res = _get_active_or_target_win32("", exclude_hwnds=exclude_hwnds)
+        if res:
+            wid, bounds = res
+            title = get_window_title(wid)
+            return wid, title, bounds
+    elif _XLIB_AVAILABLE and _DISPLAY:
+        res = _get_active_or_target_x11("")
+        if res:
+            wid, bounds = res
+            title = get_window_title(wid)
+            return wid, title, bounds
+
+    sim_wid = _SIMULATED_ACTIVE_WID
+    data = _SIMULATED_WINDOWS[sim_wid]
+    r = data["rect"]
+    return sim_wid, data["title"], (r[0], r[1], r[2], r[3])
 
 
 def close_window(wid: int) -> bool:

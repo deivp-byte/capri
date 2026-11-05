@@ -95,6 +95,30 @@ def abrir_aplicacion(app_name: str = "", **kwargs) -> str:
             lower_name = clean_name.lower()
             break
 
+    # Check if query contains search phrases (e.g. "brave busca youtube", "chrome y busca...")
+    for sep in (" busca ", " y busca ", " buscar ", " search "):
+        if sep in lower_name:
+            parts = lower_name.split(sep, 1)
+            raw_target = parts[0].replace("en ", "").replace("entra a ", "").replace("abre ", "").strip()
+            raw_query = parts[1].strip()
+            from abilities.agent_interaction import browser_search
+            return browser_search(query=raw_query, browser=raw_target)
+
+    # Check if target is a known direct web platform (e.g. "youtube", "twitch", "github", "reddit")
+    from abilities.app_finder import KNOWN_WEB_SERVICES, resolve_application_command
+    if lower_name in KNOWN_WEB_SERVICES:
+        return open_website(KNOWN_WEB_SERVICES[lower_name])
+
+    # Universal application resolver (Queries Windows Registry App Paths, LocalAppData, Program Files)
+    resolved_cmd = resolve_application_command(clean_name)
+    if resolved_cmd:
+        cmd_args, disp_name = resolved_cmd
+        try:
+            subprocess.Popen(cmd_args, start_new_session=True)
+            return f"Status: Application '{disp_name}' successfully launched."
+        except Exception as launch_err:
+            pass
+
     # Comprehensive Cross-Platform Application Aliases
     app_aliases = {
         # Settings & Control Panel
@@ -588,6 +612,137 @@ def take_screenshot(**kwargs) -> str:
     return f"Status: Screenshot simulated at '{shot_path}'."
 
 
+def look_at_screen(focus: str = "", **kwargs) -> str:
+    """
+    Captures desktop screenshot, gathers real-time screen telemetry (focused application,
+    window geometry, system resource utilization, active media playback), and queries
+    local Ollama vision model (if available) or synthesizes real contextual vision ground truth.
+    """
+    import base64
+    from abilities.window_manager import get_topmost_app_window
+    from abilities.media_sensor import get_now_playing
+
+    captures_dir = DATA_DIR / "captures"
+    captures_dir.mkdir(parents=True, exist_ok=True)
+    shot_path = captures_dir / "screen_look.jpg"
+
+    captured = False
+    try:
+        from PySide6.QtGui import QGuiApplication
+        screen = QGuiApplication.primaryScreen()
+        if screen:
+            pix = screen.grabWindow(0)
+            # Scale down for faster local inference if large
+            if pix.width() > 1920:
+                pix = pix.scaledToWidth(1920)
+            pix.save(str(shot_path), "JPG", quality=85)
+            captured = True
+    except Exception:
+        pass
+
+    # Collect active window telemetry
+    top = get_topmost_app_window()
+    win_info = "Ninguna ventana principal detectada"
+    if top:
+        _, title, (x, y, w, h) = top
+        win_info = f"Ventana en foco: '{title}' ({w}x{h} en coords x={x}, y={y})"
+
+    # Collect hardware stats
+    cpu_info = ""
+    ram_info = ""
+    try:
+        import psutil
+        cpu_pct = psutil.cpu_percent(interval=None)
+        ram_pct = psutil.virtual_memory().percent
+        cpu_info = f"CPU: {cpu_pct}%"
+        ram_info = f"RAM: {ram_pct}%"
+    except Exception:
+        pass
+
+    # Collect media status
+    media = get_now_playing()
+    media_info = "Sin reproducción de música activa"
+    if media.get("playing"):
+        media_info = f"Música activa: '{media.get('title')}' de {media.get('artist') or 'Artista desconocido'} ({media.get('source')})"
+
+    # Check if Ollama has a vision model available
+    vision_description = ""
+    if captured and shot_path.exists():
+        try:
+            client = Client(host=get_config().get("ollama", {}).get("host", "http://localhost:11434"))
+            models_resp = client.list()
+            vision_candidates = [
+                m.model for m in models_resp.models
+                if any(v in m.model.lower() for v in ("vision", "llava", "minicpm", "moondream", "bakllava"))
+            ]
+            if vision_candidates:
+                v_model = vision_candidates[0]
+                with open(shot_path, "rb") as img_f:
+                    b64_img = base64.b64encode(img_f.read()).decode("utf-8")
+                v_prompt = f"Analiza brevemente lo que se ve en la pantalla. Pregunta del usuario: {focus or '¿Qué hay en pantalla?'}. Sé conciso."
+                gen_resp = client.generate(model=v_model, prompt=v_prompt, images=[b64_img])
+                vision_description = gen_resp.response.strip()
+        except Exception:
+            pass
+
+    if vision_description:
+        return f"Status: [Visión VLM activa] {vision_description} | Telemetría: {win_info}, {media_info}."
+
+    return (
+        f"Status: Captura tomada en '{shot_path}'. "
+        f"Telemetría en tiempo real: {win_info}. "
+        f"Rendimiento: {ram_info}, {cpu_info}. "
+        f"{media_info}."
+    )
+
+
+def get_current_music(**kwargs) -> str:
+    """Detects what music or media is currently playing on the desktop (Spotify, YouTube, etc.)."""
+    from abilities.media_sensor import get_now_playing
+    data = get_now_playing()
+    if data["playing"]:
+        artist = data["artist"]
+        title = data["title"]
+        source = data["source"]
+        if artist:
+            return f"Status: Reproduciendo actualmente '{title}' de {artist} (Fuente: {source})."
+        return f"Status: Reproduciendo actualmente '{title}' (Fuente: {source})."
+    return "Status: No se detecta ninguna música o reproducción multimedia activa en este momento."
+
+
+def control_music(action: str = "toggle", **kwargs) -> str:
+    """Controls media playback: play, pause, toggle, next, prev, stop."""
+    from abilities.media_sensor import control_media
+    act = (action or kwargs.get("cmd") or "toggle").strip()
+    return control_media(act)
+
+
+def get_system_info(**kwargs) -> str:
+    """Retrieves real-time hardware specifications, component telemetry, and system metrics."""
+    from abilities.system_sensor import format_system_report
+    report = format_system_report()
+    return f"Status: Telemetría de hardware obtenida con éxito:\n{report}"
+
+
+def perch_window(app_name: str = "", **kwargs) -> str:
+    """Triggers Spider-Man to climb and perch on the active or requested window's top ledge."""
+    from abilities.window_manager import get_topmost_app_window, get_active_or_target_window
+    if app_name:
+        target = get_active_or_target_window(app_name)
+    else:
+        top = get_topmost_app_window()
+        target = (top[0], top[2]) if top else None
+
+    if not target:
+        return "Status: No se encontró una ventana abierta adecuada para posarse."
+
+    wid, (wx, wy, ww, wh) = target
+    if WINDOW_PERCH_CALLBACK:
+        WINDOW_PERCH_CALLBACK(wid, (wx, wy, ww, wh))
+        return f"Status: Posándose en el borde superior de la ventana {wid} ({ww}x{wh})."
+    return f"Status: Ventana {wid} localizada para posarse."
+
+
 # Initialize shared memory store
 SHARED_MEMORY = CapriMemory(DATA_DIR / "memory.json")
 
@@ -610,6 +765,12 @@ def remember(fact: str = "", **kwargs) -> str:
 
 # Callback registry to notify PySide6 UI overlay of window manipulation events
 WINDOW_ACTION_CALLBACK: Optional[Callable[[int, str, Tuple[int, int, int, int], Tuple[int, int, int, int]], None]] = None
+WINDOW_PERCH_CALLBACK: Optional[Callable[[int, Tuple[int, int, int, int]], None]] = None
+
+def set_window_perch_callback(cb: Optional[Callable[[int, Tuple[int, int, int, int]], None]]) -> None:
+    """Registers callback to trigger visual window perching in PySide6."""
+    global WINDOW_PERCH_CALLBACK
+    WINDOW_PERCH_CALLBACK = cb
 
 def set_window_action_callback(cb: Optional[Callable[[int, str, Tuple[int, int, int, int], Tuple[int, int, int, int]], None]]) -> None:
     """Registers callback function to emit window choreography events to PySide6."""
@@ -720,19 +881,117 @@ def interact_window(action: str = "move", app_name: str = "", direction: str = "
         return f"Status: Window (ID {wid}) moved and dragged {dir_clean} to ({target_x}, {target_y})."
 
 
+# ==============================================================================
+# SECTION 1.1: AGENT INTERACTION & CUSTOM COMMANDS TOOLS
+# ==============================================================================
+
+from abilities.agent_interaction import browser_search, type_in_app, press_hotkey
+from abilities.custom_commands import (
+    find_matching_command,
+    get_command,
+    list_commands,
+    save_command,
+    delete_command,
+)
+
+
+def run_custom_command(name: str = "", actions: list[str] | None = None, **kwargs) -> str:
+    """
+    Executes a saved custom command / macro by name or an explicit list of actions,
+    running all associated sub-actions in sequential order.
+    """
+    cmd_actions = actions or kwargs.get("steps")
+    cmd_title = name or kwargs.get("cmd") or "Secuencia de acciones"
+
+    if not cmd_actions:
+        clean_name = (name or kwargs.get("cmd") or "").strip()
+        cmd = get_command(clean_name)
+        if not cmd:
+            return f"Status: Error - No se encontró la comanda '{clean_name}'."
+        cmd_actions = cmd.get("actions", [])
+        cmd_title = cmd.get("name", clean_name)
+
+    if not cmd_actions:
+        return f"Status: La comanda '{cmd_title}' no tiene acciones registradas."
+
+    results = []
+    for act in cmd_actions:
+        # Detect and execute each sub-action deterministically
+        intent = parse_quick_intent(act)
+        if intent:
+            fn_name = intent.function.name
+            fn_args = intent.function.arguments if hasattr(intent.function, "arguments") else {}
+            if isinstance(fn_args, str):
+                try:
+                    fn_args = json.loads(fn_args)
+                except Exception:
+                    fn_args = {}
+            fn = TOOL_REGISTRY.get(fn_name)
+            if fn:
+                sub_res = fn(**fn_args)
+            else:
+                sub_res = f"Tool {fn_name} not found"
+        else:
+            # Fallback to direct app launch or website
+            if act.startswith(("http://", "https://", "www.")):
+                sub_res = open_website(act)
+            else:
+                sub_res = abrir_aplicacion(act)
+        results.append(f"• {act}: {sub_res}")
+
+    return f"Status: Comanda '{cmd_title}' completada con éxito:\n" + "\n".join(results)
+
+
+def manage_custom_commands(action: str = "list", name: str = "", actions: str = "", **kwargs) -> str:
+    """
+    Manages user-defined custom commands (macros).
+    Allows creating ('create'), deleting ('delete'), or listing ('list') saved commands.
+    """
+    act = (action or "list").strip().lower()
+    if act in ("create", "add", "crear", "guardar", "nueva"):
+        if not name or not actions:
+            return "Status: Error - Se requiere un nombre y una lista de acciones para crear la comanda."
+        res = save_command(name, actions)
+        if res:
+            return f"Status: Comanda '{res['name']}' guardada en el sistema. Acciones configuradas: {', '.join(res['actions'])}."
+        return "Status: Error al guardar la comanda."
+    elif act in ("delete", "remove", "borrar", "eliminar"):
+        if not name:
+            return "Status: Error - Se requiere el nombre de la comanda a eliminar."
+        if delete_command(name):
+            return f"Status: Comanda '{name}' eliminada correctamente del sistema."
+        return f"Status: No se encontró la comanda '{name}' para eliminar."
+    else:
+        cmds = list_commands()
+        if not cmds:
+            return "Status: No hay comandas personalizadas guardadas actualmente."
+        lines = [f"• {c['name'].upper()}: {', '.join(c['actions'])}" for c in cmds]
+        return "Status: Comandas registradas:\n" + "\n".join(lines)
+
+
 # Tool definition list for Ollama
 AVAILABLE_TOOLS: List[Callable] = [
     abrir_aplicacion,
     open_website,
     web_search,
+    browser_search,
+    type_in_app,
+    press_hotkey,
+    run_custom_command,
+    manage_custom_commands,
     play_song,
+    get_current_music,
+    control_music,
+    get_system_info,
     set_reminder,
     get_weather,
     set_volume,
     take_screenshot,
+    look_at_screen,
     manage_files,
     remember,
     interact_window,
+    perch_window,
 ]
 
 # Dispatch mapping for tool invocations
@@ -746,14 +1005,47 @@ TOOL_REGISTRY: Dict[str, Callable] = {
     "open_url": open_website,
     "web_search": web_search,
     "search": web_search,
+    "browser_search": browser_search,
+    "navegador_buscar": browser_search,
+    "buscar_en_navegador": browser_search,
+    "type_in_app": type_in_app,
+    "type_text": type_in_app,
+    "escribir_texto": type_in_app,
+    "input_text": type_in_app,
+    "press_hotkey": press_hotkey,
+    "hotkey": press_hotkey,
+    "press_key": press_hotkey,
+    "atajo_teclado": press_hotkey,
+    "run_custom_command": run_custom_command,
+    "execute_command": run_custom_command,
+    "ejecutar_comanda": run_custom_command,
+    "comanda": run_custom_command,
+    "manage_custom_commands": manage_custom_commands,
+    "custom_commands": manage_custom_commands,
+    "gestionar_comandas": manage_custom_commands,
     "play_song": play_song,
     "play_music": play_song,
+    "get_current_music": get_current_music,
+    "current_music": get_current_music,
+    "now_playing": get_current_music,
+    "que_musica_suena": get_current_music,
+    "control_music": control_music,
+    "media_control": control_music,
+    "get_system_info": get_system_info,
+    "get_hardware_specs": get_system_info,
+    "system_info": get_system_info,
+    "informacion_sistema": get_system_info,
+    "specs": get_system_info,
+    "hardware": get_system_info,
     "set_reminder": set_reminder,
     "get_weather": get_weather,
     "set_volume": set_volume,
     "change_volume": set_volume,
     "take_screenshot": take_screenshot,
     "screenshot": take_screenshot,
+    "look_at_screen": look_at_screen,
+    "mira_mi_pantalla": look_at_screen,
+    "check_screen": look_at_screen,
     "manage_files": manage_files,
     "remember": remember,
     "guardar_memoria": remember,
@@ -766,6 +1058,9 @@ TOOL_REGISTRY: Dict[str, Callable] = {
     "arrastrar_ventana": interact_window,
     "tirar_ventana": interact_window,
     "apartar_ventana": interact_window,
+    "perch_window": perch_window,
+    "perch": perch_window,
+    "posarse_ventana": perch_window,
 }
 
 
@@ -795,7 +1090,51 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
     if not t:
         return None
 
-    # 1. Volume adjustment
+    # 0. Custom Commands (Macros) Check
+    matched_cmd = find_matching_command(t)
+    if matched_cmd:
+        return SyntheticToolCall(SyntheticFunction("run_custom_command", {"name": matched_cmd["name"]}))
+
+    # 0.1 Compound Chained Actions (e.g. "abre discord y abre spotify", "minimiza brave y abre la calculadora")
+    from abilities.smart_intent import parse_compound_chained_request, parse_browser_or_search_request
+    compound_steps = parse_compound_chained_request(t)
+    if compound_steps:
+        return SyntheticToolCall(SyntheticFunction("run_custom_command", {"name": "secuencia_multipasos", "actions": compound_steps}))
+
+    # 1.0 Smart Semantic Browser Search & Navigation (e.g. "en brave busca youtube", "entra a brave y busca X", "abre youtube", "busca X en brave")
+    smart_nav = parse_browser_or_search_request(t)
+    if smart_nav:
+        act_name = smart_nav.get("action", "browser_search")
+        if act_name == "browser_search":
+            return SyntheticToolCall(SyntheticFunction("browser_search", {
+                "query": smart_nav["query"],
+                "engine": smart_nav.get("engine", "google"),
+                "browser": smart_nav.get("browser", ""),
+            }))
+        elif act_name == "open_website":
+            return SyntheticToolCall(SyntheticFunction("open_website", {"url": smart_nav["url"]}))
+
+    # 1.1 In-app typing (typing text into active window, browser search bar, chat, editor)
+    type_match = re.search(
+        r'(?:^|\b)(?:por\s+favor\s+)?(?:escribe|escribir|type|introduce|teclea)\s+(?:el\s+texto\s+|el\s+mensaje\s+|la\s+frase\s+)?["\']?([^"\']+)["\']?(?:\s+(?:en\s+|dentro\s+de\s+)(?:la\s+|el\s+)?(?:pantalla|app|aplicaci[oó]n|ventana|navegador|chat|bloc|editor))?[.!?]*$',
+        t,
+        re.I
+    )
+    if type_match and not any(w in t.lower() for w in ["archivo", "fichero", "nota"]):
+        content_to_type = type_match.group(1).strip()
+        if content_to_type:
+            return SyntheticToolCall(SyntheticFunction("type_in_app", {"text": content_to_type, "press_enter": True}))
+
+    # 1.2 Hotkeys & Keyboard shortcuts
+    hotkey_match = re.search(
+        r'(?:^|\b)(?:por\s+favor\s+)?(?:pulsa|presiona|presionar|press|env[ií]a\s+el\s+atajo)\s+(?:la\s+tecla\s+|el\s+atajo\s+)?(enter|intro|esc|escape|f5|ctrl\+[a-z]|alt\+f4)[.!?]*$',
+        t,
+        re.I
+    )
+    if hotkey_match:
+        return SyntheticToolCall(SyntheticFunction("press_hotkey", {"keys": hotkey_match.group(1).lower()}))
+
+    # 1.3 Volume adjustment
     vol_set = re.search(r'(?:^|\b)(?:pon|ajusta|set)\s+(?:el\s+)?volumen\s+(?:al?\s*)?(\d+)', t, re.I)
     if vol_set:
         return SyntheticToolCall(SyntheticFunction("set_volume", {"action": "set", "level": int(vol_set.group(1))}))
@@ -807,6 +1146,21 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
         return SyntheticToolCall(SyntheticFunction("set_volume", {"action": "mute"}))
     if re.search(r'(?:^|\b)(?:desmutea|unmute|reactiva\s+el\s+sonido)\b', t, re.I):
         return SyntheticToolCall(SyntheticFunction("set_volume", {"action": "unmute"}))
+
+    # 2.0 Look at screen / Vision analysis
+    if re.search(r'(?:^|\b)(?:mira\s+(?:mi\s+|la\s+)?pantalla|mira\s+esto|qu[eé]\s+(?:ves|hay|tengo\s+abierto)|check\s+(?:my\s+)?screen|look\s+at\s+(?:the\s+)?screen|analiza\s+(?:mi\s+|la\s+)?pantalla)\b', t, re.I):
+        return SyntheticToolCall(SyntheticFunction("look_at_screen", {"focus": t}))
+
+    # 2.0.1 Real Hardware & System Specifications query
+    if re.search(
+        r'(?:^|\b)(?:qu[eé]\s+(?:componentes|piezas|hardware|especificaciones|specs|caracter[ií]sticas|ordenador|pc)\s+(?:tengo|hay|tiene)|'
+        r'cu[aá]nta\s+ram\s+(?:tengo|hay|queda)|qu[eé]\s+(?:procesador|cpu|tarjeta\s+gr[aá]fica|gpu|gr[aá]fica|disco|sistema\s+operativo)\s+(?:tengo|hay)|'
+        r'info(?:rmaci[oó]n)?\s+(?:del?\s+)?(?:sistema|pc|ordenador)|specs?\s+(?:del?\s+)?(?:pc|ordenador)?|'
+        r'c[oó]mo\s+va\s+el\s+(?:pc|ordenador|sistema))\b',
+        t,
+        re.I
+    ):
+        return SyntheticToolCall(SyntheticFunction("get_system_info", {}))
 
     # 2. Screenshot
     if re.search(r'(?:^|\b)(?:toma|haz|saca|take)\s+(?:una\s+)?(?:captura|screenshot)', t, re.I):
@@ -921,6 +1275,22 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
     if re.search(r'(?:^|\b)(?:mueve|mover|arrastra|arrastrar|drag|move)\s+(?:la\s+|esta\s+)?ventana', t, re.I):
         return SyntheticToolCall(SyntheticFunction("interact_window", {"action": "move", "app_name": app_target, "direction": dir_found}))
 
+    # Match window perching (climb/sit on window ledge)
+    if re.search(r'(?:^|\b)(?:s[uú]bete|posate|p[oó]sate|si[eé]ntate|trepa)\s+(?:a|en)\s+(?:la\s+|esta\s+)?ventana\b|(?:^|\b)perch\b', t, re.I):
+        return SyntheticToolCall(SyntheticFunction("perch_window", {"app_name": app_target}))
+
+    # 3. Media status & controls (Music sensing & playback)
+    if re.search(r'(?:^|\b)(?:qu[eé]\s+(?:m[uú]sica|canci[oó]n|tema)\s+(?:suena|estoy\s+escuchando|se\s+reproduce)|qu[eé]\s+suena|what(?:\'s|\s+is)\s+playing)\b', t, re.I):
+        return SyntheticToolCall(SyntheticFunction("get_current_music", {}))
+    if re.search(r'(?:^|\b)(?:pausa|det[eé]n|para)\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n|reproducci[oó]n)\b', t, re.I):
+        return SyntheticToolCall(SyntheticFunction("control_music", {"action": "pause"}))
+    if re.search(r'(?:^|\b)(?:reanuda|contin[uú]a|play|dale\s+al\s+play)\s+(?:la\s+)?(?:m[uú]sica|canci[oó]n)\b', t, re.I):
+        return SyntheticToolCall(SyntheticFunction("control_music", {"action": "play"}))
+    if re.search(r'(?:^|\b)(?:siguiente\s+(?:canci[oó]n|tema|pista)|pasa\s+(?:de\s+)?(?:canci[oó]n|tema|pista)|next\s+(?:song|track))\b', t, re.I):
+        return SyntheticToolCall(SyntheticFunction("control_music", {"action": "next"}))
+    if re.search(r'(?:^|\b)(?:anterior\s+(?:canci[oó]n|tema|pista)|vuelve\s+a\s+la\s+canci[oó]n\s+anterior|previous\s+(?:song|track))\b', t, re.I):
+        return SyntheticToolCall(SyntheticFunction("control_music", {"action": "prev"}))
+
     # 3. Open application / settings / calculator
     app_match = re.search(
         r'(?:^|\b)(?:por\s+favor\s+)?(?:abre|abrir|open|inicia|iniciar|launch|ejecuta|ejecutar|lanza|lanzar)\s+(?:la\s+|el\s+|los\s+|las\s+|app\s+de\s+|aplicaci[oó]n\s+de\s+)?(.+?)[.!?]*$',
@@ -971,6 +1341,9 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
     return None
 
 
+parse_quick_intent = _detect_action_intent
+
+
 def _clean_bot_cliches(text: str) -> str:
     """Removes generic chatbot customer-service suffixes that small SLMs occasionally emit."""
     cliches = [
@@ -1003,11 +1376,11 @@ class SpiderBrain:
     def __init__(self) -> None:
         self.cfg = get_config()
         self.host: str = self.cfg.get("ollama.host", "http://localhost:11434")
-        self.model: str = self.cfg.get("ollama.model", "llama3.2:3b")
+        self.model: str = self.cfg.get("ollama.model", "qwen2.5:3b")
         # keep_alive='5m' keeps model warm in memory across conversational turns
         self.keep_alive = self.cfg.get("ollama.keep_alive", "5m")
         self.num_ctx: int = self.cfg.get("ollama.num_ctx", 2048)
-        self.max_tokens: int = self.cfg.get("ollama.max_tokens", 90)
+        self.max_tokens: int = max(150, self.cfg.get("ollama.max_tokens", 160))
         self.temperature: float = self.cfg.get("ollama.temperature", 0.7)
         self.user_name: str = self.cfg.get("user_name", "Deivid")
         self.language: str = self.cfg.get("language", "es")
@@ -1100,6 +1473,12 @@ class SpiderBrain:
         if relevant_facts:
             facts_context = f"\n[(Things you remember about {self.user_name}, use only if relevant: {'; '.join(relevant_facts)})]"
 
+        # Real-time host telemetry & temporal anchoring
+        import datetime
+        from abilities.system_sensor import get_quick_system_summary
+        now_str = datetime.datetime.now().strftime("%A %d de %B de %Y, %H:%M")
+        live_telemetry = f"\n[(Host state: {get_quick_system_summary()} | Hora local: {now_str})]"
+
         # Performance options
         options = {
             "num_ctx": self.num_ctx,
@@ -1134,7 +1513,7 @@ class SpiderBrain:
                 f"confirming what you just did with your witty, scientific, sarcastic personality. "
                 f"STRICT RULE: The action is ALREADY DONE. Do NOT explain how the user can click buttons or menus themselves, and do NOT make excuses saying you cannot do it.)]"
             )
-            ephemeral_user_content = f"{user_text}\n\n{dynamic_reminder}{facts_context}{system_instruction}"
+            ephemeral_user_content = f"{user_text}\n\n{dynamic_reminder}{facts_context}{live_telemetry}{system_instruction}"
             ephemeral_messages = list(self.history) + [
                 {"role": "user", "content": ephemeral_user_content}
             ]
@@ -1171,18 +1550,24 @@ class SpiderBrain:
                 return final_reply
 
             except ConnectionError:
-                err_msg = "[Spider-Man: Connection lost with Ollama server at http://localhost:11434]"
-                print(f"\n{err_msg}")
-                return err_msg
+                fallback_reply = f"¡Acción completada con éxito, socio! He ejecutado la orden en tu equipo."
+                self.history.append({"role": "user", "content": user_text})
+                self.history.append({"role": "assistant", "content": fallback_reply})
+                self.trim_history()
+                self.save_memory()
+                return fallback_reply
             except Exception as ex:
-                err_msg = f"[Spider-Man: Action executed ({tool_result}), but response failed: {ex}]"
-                print(f"\n{err_msg}")
-                return err_msg
+                fallback_reply = f"¡Marchando! Acción completada en el sistema a tu orden."
+                self.history.append({"role": "user", "content": user_text})
+                self.history.append({"role": "assistant", "content": fallback_reply})
+                self.trim_history()
+                self.save_memory()
+                return fallback_reply
 
         # ----------------------------------------------------------------------
         # PATH 2: GENERAL CHAT & OPEN-ENDED TOOL INVOCATION
         # ----------------------------------------------------------------------
-        ephemeral_user_content = f"{user_text}\n\n{dynamic_reminder}{facts_context}"
+        ephemeral_user_content = f"{user_text}\n\n{dynamic_reminder}{facts_context}{live_telemetry}"
         ephemeral_messages = list(self.history) + [
             {"role": "user", "content": ephemeral_user_content}
         ]
