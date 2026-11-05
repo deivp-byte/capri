@@ -1,4 +1,7 @@
 # Spider-Man Desktop Agent
+<img width="426" height="240" alt="Video Project" src="https://github.com/user-attachments/assets/9eaec6a5-1f6a-4613-96ac-c809e270f5e6" />
+
+
 
 Aplicación de escritorio que muestra un compañero virtual de Spider-Man sobre el
 escritorio. El agente usa una interfaz gráfica transparente construida con
