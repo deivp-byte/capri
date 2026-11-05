@@ -396,7 +396,16 @@ class SpiderWindow(QWidget):
         self.setMouseTracking(True)
 
     def _on_anim_tick(self) -> None:
-        """Updates active sprite on frame changes."""
+        """60 FPS animation loop: frame advancing, real-time window tracking & physics."""
+        # High-frequency synchronous window follow (60 FPS, zero stutter)
+        if (
+            self._perch_info is not None
+            and not self.is_roaming_moving
+            and not self._choreo_timer.isActive()
+            and self._drag_pos is None
+        ):
+            self._update_perch_follow()
+
         if self.animator.tick():
             self.update()
 
@@ -497,9 +506,9 @@ class SpiderWindow(QWidget):
 
         elif action in ("move", "drag"):
             # Caso C: Arrastre físico en ventana ("drag")
-            # 1. Position on top window frame
+            # 1. Position on top window frame with contact edge alignment
             target_spidey_x = wx + ww // 2 - self.width() // 2
-            target_spidey_y = max(0, wy - self.height() + 10)
+            target_spidey_y = wy + 2 if wy <= 115 else wy - 130
             self.move(target_spidey_x, target_spidey_y)
             self.bubble.reposition()
             # 2. Change to push/effort sprite
@@ -540,7 +549,7 @@ class SpiderWindow(QWidget):
             # Caso A: Pendular swing path
             spidey_start = c["spidey_start"]
             target_spidey_x = wx + ww // 2 - self.width() // 2
-            target_spidey_y = max(0, wy - self.height() + 10)
+            target_spidey_y = wy + 2 if wy <= 115 else wy - 130
 
             # Arc trajectory
             curr_x = spidey_start.x() + (target_spidey_x - spidey_start.x()) * progress
@@ -587,7 +596,8 @@ class SpiderWindow(QWidget):
             curr_wy = int(wy + (ty - wy) * progress)
 
             move_window(wid, curr_wx, curr_wy)
-            self.move(curr_wx + ww // 2 - self.width() // 2, max(0, curr_wy - self.height() + 10))
+            target_spidey_y = curr_wy + 2 if curr_wy <= 115 else curr_wy - 130
+            self.move(curr_wx + ww // 2 - self.width() // 2, target_spidey_y)
             self.bubble.reposition()
 
             if progress >= 1.0:
@@ -786,12 +796,9 @@ class SpiderWindow(QWidget):
         """
         Main heartbeat of Spider-Man's autonomous life.
         Paced calmly so he rests, perches, or observes without frantic side-to-side pacing.
+        Note: Perched window tracking is executed at 60 FPS in _on_anim_tick().
         """
         now = time.monotonic()
-
-        # Follow perched window if active
-        if self._perch_info is not None and not self.is_roaming_moving:
-            self._update_perch_follow()
 
         # Check guard conditions: do not roam when user is interacting or busy
         if (
@@ -832,36 +839,83 @@ class SpiderWindow(QWidget):
             self._start_auto_walk()
 
     def _update_perch_follow(self) -> None:
-        """Tracks the perched window's position across the desktop in real time."""
+        """
+        High-frequency synchronous window tracking engine (60 FPS, 0 ms latency).
+        Smoothly follows window dragging without teleportation and plays reactive
+        riding/effort animations when the window is dragged across the screen.
+        """
         if not self._perch_info:
             return
+
         now = time.monotonic()
         if now >= self._perch_info.get("perch_until", 0):
             self._start_auto_descend_to_floor()
             return
 
         wid = self._perch_info["wid"]
-        target = None
-        if sys.platform == "win32":
-            from abilities.window_manager import _get_window_bounds_win32
-            b = _get_window_bounds_win32(wid)
-            if b:
-                target = (wid, b)
-        if not target:
-            target = get_active_or_target_window("")
+        bounds = None
 
-        if not target or target[0] != wid:
-            # Focus moved or window closed -> hop down to floor
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                if not user32.IsWindow(wid) or user32.IsIconic(wid) or not user32.IsWindowVisible(wid):
+                    self._start_auto_descend_to_floor()
+                    return
+                from abilities.window_manager import _get_window_bounds_win32
+                bounds = _get_window_bounds_win32(wid)
+            except Exception:
+                bounds = None
+        else:
+            from abilities.window_manager import get_active_or_target_window
+            target = get_active_or_target_window("")
+            if target and target[0] == wid:
+                bounds = target[1]
+
+        if not bounds:
             self._start_auto_descend_to_floor()
             return
 
-        _, (wx, wy, ww, wh) = target
-        new_x = wx + self._perch_info["rel_x"]
-        new_y = wy + self._perch_info["rel_y"]
+        wx, wy, ww, wh = bounds
 
-        if abs(self.x() - new_x) > 2 or abs(self.y() - new_y) > 2:
-            self.move(int(new_x), int(new_y))
+        # If window collapsed or closed to zero geometry
+        if ww < 150 or wh < 100:
+            self._start_auto_descend_to_floor()
+            return
+
+        target_x = wx + self._perch_info["rel_x"]
+        target_y = wy + self._perch_info["rel_y"]
+
+        curr_x = self.x()
+        curr_y = self.y()
+        dx = target_x - curr_x
+        dy = target_y - curr_y
+        dist = math.hypot(dx, dy)
+
+        if dist >= 1.0:
+            # Immediate zero-lag physical displacement
+            self.move(int(target_x), int(target_y))
             self.bubble.reposition()
+
+            # Dynamic reactive animation when user drags the window with velocity
+            if dist >= 2.8:
+                self._perch_info["last_drag_time"] = now
+                if dx < -1.5:
+                    self.facing_left = True
+                elif dx > 1.5:
+                    self.facing_left = False
+
+                # Switch to active clinging/effort animation while riding window
+                clinging = "work" if "work" in self.animator.animations else ("drag" if "drag" in self.animator.animations else "climb")
+                if self.animator.current_state != clinging and self.animator.current_state not in ("talk", "think"):
+                    self.animator.set_state(clinging)
+        else:
+            # Window is stationary: after slight deceleration buffer, return to relaxed sitting posture
+            last_drag = self._perch_info.get("last_drag_time", 0.0)
+            if now - last_drag > 0.16:
+                settled = self._perch_info.get("settled_state", "sit")
+                if self.animator.current_state not in (settled, "sleep", "talk", "think"):
+                    self.animator.set_state(settled)
 
     def _start_auto_walk(self) -> None:
         """Walks or runs along the desktop floor/taskbar to a new X position."""
@@ -895,7 +949,11 @@ class SpiderWindow(QWidget):
         }
         self._roam_motion_timer.start(16)
 
-    def _start_auto_swing(self, custom_target: tuple[int, int] | None = None) -> None:
+    def _start_auto_swing(
+        self,
+        custom_target: tuple[int, int] | None = None,
+        final_state: str | None = None,
+    ) -> None:
         """Launches dynamic web swing across the desktop with pendular arc."""
         screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
         floor_y = self.get_floor_y()
@@ -928,6 +986,9 @@ class SpiderWindow(QWidget):
 
         total_frames = max(35, min(65, int(abs(dist) / 10)))
 
+        if final_state is None:
+            final_state = "land" if target_y >= floor_y - 20 else "idle"
+
         self._current_roam_action = {
             "type": "swing",
             "start_x": start_pt.x(),
@@ -936,7 +997,7 @@ class SpiderWindow(QWidget):
             "target_y": target_y,
             "frame": 0,
             "total_frames": total_frames,
-            "final_state": "land" if target_y >= floor_y - 20 else "idle",
+            "final_state": final_state,
         }
         self._roam_motion_timer.start(16)
 
@@ -975,7 +1036,7 @@ class SpiderWindow(QWidget):
     def perch_on_window(self, wid: int = 0, coords: Optional[tuple] = None) -> bool:
         """
         Actively targets a specific or topmost desktop window and performs a
-        realistic swing/leap to sit on its upper ledge.
+        realistic swing/leap to sit on its upper ledge with pixel-accurate contact alignment.
         """
         try:
             self._cancel_roam()
@@ -983,27 +1044,48 @@ class SpiderWindow(QWidget):
 
             if not coords or not wid:
                 from abilities.window_manager import get_topmost_app_window
-                top = get_topmost_app_window(exclude_hwnds={int(self.winId())})
+                exclude = {int(self.winId()), int(self.bubble.winId()), int(self.web_overlay.winId())}
+                top = get_topmost_app_window(exclude_hwnds=exclude)
                 if not top:
                     return False
                 wid, title, (wx, wy, ww, wh) = top
             else:
                 wx, wy, ww, wh = coords
 
-            if ww < 220 or wh < 180 or wy < -50:
+            if ww < 220 or wh < 180 or wy < -80:
                 return False
 
             screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
-            perch_x = wx + random.randint(40, max(50, ww - self.SPRITE_WIDTH - 40))
-            perch_y = max(screen_y, wy - self.SPRITE_HEIGHT + 14)
+
+            # Contact alignment:
+            # Sprite 128x128 is centered at (0, 10) inside the 140x160 widget.
+            # Feet contact line is at Y = 131 in widget coordinates.
+            # Top-edge perch: perch_y = wy - 130 places Spidey's feet squarely on top of the window frame.
+            # For windows touching or snapped to screen ceiling, sit inside top bar safely.
+            if wy <= screen_y + 115:
+                perch_y = max(screen_y + 2, wy + 2)
+                settled_state = "sit"
+            else:
+                perch_y = wy - 130
+                settled_state = "sit"
+
+            # Avoid caption control buttons (Minimize, Maximize, Close occupy rightmost ~160px)
+            left_margin = wx + 50
+            right_margin = max(left_margin, wx + ww - self.SPRITE_WIDTH - 150)
+            if right_margin > left_margin:
+                perch_x = random.randint(left_margin, right_margin)
+            else:
+                perch_x = wx + max(10, (ww - self.SPRITE_WIDTH) // 2)
 
             self._perch_info = {
                 "wid": wid,
                 "rel_x": perch_x - wx,
                 "rel_y": perch_y - wy,
-                "perch_until": time.monotonic() + random.uniform(25.0, 45.0),
+                "perch_until": time.monotonic() + random.uniform(30.0, 60.0),
+                "last_drag_time": 0.0,
+                "settled_state": settled_state,
             }
-            self._start_auto_swing(custom_target=(perch_x, perch_y))
+            self._start_auto_swing(custom_target=(perch_x, perch_y), final_state=settled_state)
             return True
         except Exception as err:
             print(f"[perch] Error: {err}")

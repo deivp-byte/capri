@@ -25,6 +25,7 @@ data/*.json
 data/*.log
 data/captures/
 test_new_features.py
+test_perch_tracking.py
 
 # IDE and editor files
 .vscode/
