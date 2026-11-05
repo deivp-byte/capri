@@ -69,6 +69,7 @@ class SpiderBubble(QWidget):
         self.cps = 38.0  # Characters per second for typewriter animation
         self.pause_until = 0.0
         self.hold_until = 0.0
+        self._finished_typing_at = 0.0
         self.is_thinking = False
         self.closing_at = 0.0
 
@@ -145,20 +146,41 @@ class SpiderBubble(QWidget):
     # --------------------------------------------------------------------------
 
     def say(self, reply: str, user_prompt: str = "") -> None:
-        """Displays a new reply with typewriter animation."""
+        """Displays a new reply with typewriter animation and generous reading hold time."""
         self.user_text = user_prompt
         self.full_reply = reply
         self.shown_chars = 0.0
         self.pause_until = 0.0
+        self._finished_typing_at = 0.0
         self.is_thinking = False
         self.closing_at = 0.0
 
-        # Hold time based on reading duration
-        reading_time = len(reply) / self.cps
-        self.hold_until = time.monotonic() + reading_time + 4.5
+        # Generous reading duration: base 11.0s + 0.07s per char (ensures long replies are readable)
+        typing_time = len(reply) / self.cps
+        reading_time = max(11.0, len(reply) * 0.07)
+        self.hold_until = time.monotonic() + typing_time + reading_time
 
         self.edit.setEnabled(True)
         self.edit.setPlaceholderText("Message Spider-Man... [Enter]")
+
+        self._recalculate_size()
+        self.reposition()
+        self.show()
+        self.raise_()
+
+    def action_notice(self, notice: str, user_prompt: str = "") -> None:
+        """Displays immediate action notice with active pulsing indicator and prepares for Ollama stream."""
+        self.user_text = user_prompt
+        self.full_reply = notice
+        self.shown_chars = float(len(notice))
+        self.pause_until = 0.0
+        self._finished_typing_at = 0.0
+        self.is_thinking = True
+        self.closing_at = 0.0
+        self.hold_until = time.monotonic() + 45.0
+
+        self.edit.setEnabled(False)
+        self.edit.setPlaceholderText("🕷️ Ejecutando acción en el sistema...")
 
         self._recalculate_size()
         self.reposition()
@@ -170,6 +192,8 @@ class SpiderBubble(QWidget):
         self.user_text = user_prompt
         self.full_reply = ""
         self.shown_chars = 0.0
+        self.pause_until = 0.0
+        self._finished_typing_at = 0.0
         self.is_thinking = True
         self.closing_at = 0.0
         self.hold_until = time.monotonic() + 45.0  # Allow ample inference time
@@ -282,7 +306,19 @@ class SpiderBubble(QWidget):
             self.update()
 
         # Auto-dismiss once reading hold time expires
-        if not self.is_thinking and not self.edit.hasFocus() and now > self.hold_until:
+        # 1. When typewriter finishes typing, start reading hold timer
+        if self.full_reply and self.shown_chars >= len(self.full_reply):
+            if self._finished_typing_at == 0.0:
+                self._finished_typing_at = now
+                reading_duration = max(10.0, len(self.full_reply) * 0.07)
+                self.hold_until = max(self.hold_until, now + reading_duration)
+
+        # 2. If user is hovering mouse over bubble or typing in input, pause auto-dismiss
+        if self.underMouse() or self.edit.hasFocus():
+            self.hold_until = max(self.hold_until, now + 6.0)
+
+        # 3. Dismiss only when reading time is fully elapsed and user is not hovering
+        if not self.is_thinking and not self.edit.hasFocus() and not self.underMouse() and now > self.hold_until:
             if self.shown_chars >= len(self.full_reply):
                 self.dismiss()
 

@@ -17,6 +17,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import time
 from typing import Callable, Dict, List, Optional, Tuple
 import urllib.parse
 import webbrowser
@@ -215,6 +216,11 @@ def abrir_aplicacion(app_name: str = "", **kwargs) -> str:
     # WINDOWS EXECUTION PATH
     # --------------------------------------------------------------------------
     if is_win:
+        from abilities.window_manager import ensure_app_windowed
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = 1  # SW_SHOWNORMAL (Windowed mode)
+
         candidates = []
         if target_spec:
             candidates = [target_spec] if isinstance(target_spec, str) else list(target_spec)
@@ -227,10 +233,12 @@ def abrir_aplicacion(app_name: str = "", **kwargs) -> str:
                 try:
                     if hasattr(os, "startfile"):
                         os.startfile(cand)
-                        return f"Status: Application '{clean_name}' successfully launched on Windows (protocol: {cand})."
+                        ensure_app_windowed(clean_name)
+                        return f"Status: Application '{clean_name}' successfully launched on Windows in windowed mode (protocol: {cand})."
                     else:
-                        subprocess.Popen(["cmd.exe", "/c", "start", "", cand], shell=False)
-                        return f"Status: Application '{clean_name}' successfully launched on Windows."
+                        subprocess.Popen(["cmd.exe", "/c", "start", "", cand], shell=False, startupinfo=startupinfo)
+                        ensure_app_windowed(clean_name)
+                        return f"Status: Application '{clean_name}' successfully launched on Windows in windowed mode."
                 except Exception:
                     pass
 
@@ -238,8 +246,13 @@ def abrir_aplicacion(app_name: str = "", **kwargs) -> str:
             exe_path = shutil.which(cand) or (shutil.which(cand + ".exe") if not cand.lower().endswith(".exe") else None)
             if exe_path:
                 try:
-                    proc = subprocess.Popen([exe_path], start_new_session=True)
-                    return f"Status: Application '{clean_name}' successfully launched on Windows (PID: {proc.pid})."
+                    cmd_launch = [exe_path]
+                    # If it's a known web browser, add chromium window arguments
+                    if any(b in cand.lower() for b in ("brave", "chrome", "edge", "browser")):
+                        cmd_launch += ["--start-normal", "--window-size=1200,800"]
+                    proc = subprocess.Popen(cmd_launch, start_new_session=True, startupinfo=startupinfo)
+                    ensure_app_windowed(clean_name)
+                    return f"Status: Application '{clean_name}' successfully launched on Windows in windowed mode (PID: {proc.pid})."
                 except Exception:
                     pass
 
@@ -247,14 +260,16 @@ def abrir_aplicacion(app_name: str = "", **kwargs) -> str:
             try:
                 if hasattr(os, "startfile"):
                     os.startfile(cand)
-                    return f"Status: Application '{clean_name}' successfully launched on Windows via shell."
+                    ensure_app_windowed(clean_name)
+                    return f"Status: Application '{clean_name}' successfully launched on Windows in windowed mode via shell."
             except Exception:
                 pass
 
             # 4. Fallback cmd start
             try:
-                subprocess.Popen(["cmd.exe", "/c", "start", "", cand], shell=False)
-                return f"Status: Application '{clean_name}' dispatched on Windows."
+                subprocess.Popen(["cmd.exe", "/c", "start", "", cand], shell=False, startupinfo=startupinfo)
+                ensure_app_windowed(clean_name)
+                return f"Status: Application '{clean_name}' dispatched on Windows in windowed mode."
             except Exception:
                 pass
 
@@ -1500,6 +1515,8 @@ class SpiderBrain:
                 except Exception:
                     args = {}
 
+            # Allow GUI thread to render Spidey's action animation (e.g. web-shoot/point) before window pops up
+            time.sleep(0.35)
             tool_func = TOOL_REGISTRY.get(name)
             if tool_func:
                 tool_result = tool_func(**args)

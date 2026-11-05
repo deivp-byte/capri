@@ -31,6 +31,7 @@ SEARCH_ENGINES = {
 
 
 from abilities.app_finder import find_browser_executable, KNOWN_WEB_SERVICES
+from abilities.window_manager import ensure_app_windowed
 
 
 def browser_search(query: str, engine: str = "google", browser: str = "", **kwargs) -> str:
@@ -85,7 +86,10 @@ def browser_search(query: str, engine: str = "google", browser: str = "", **kwar
         browser_bin = find_browser_executable(target_browser)
         if browser_bin:
             try:
-                subprocess.Popen([browser_bin, target_url], start_new_session=True)
+                # Launch in normal windowed mode with designated window dimensions
+                cmd = [browser_bin, "--start-normal", "--window-size=1200,800", target_url]
+                subprocess.Popen(cmd, start_new_session=True)
+                ensure_app_windowed(target_browser)
                 return f"Status: Búsqueda abierta con éxito en {target_browser.capitalize()} ({disp_engine}: '{clean_query}')."
             except Exception:
                 pass
@@ -93,12 +97,14 @@ def browser_search(query: str, engine: str = "google", browser: str = "", **kwar
     # 2. Standard cross-platform default browser launch
     try:
         webbrowser.open(target_url, new=2)
+        ensure_app_windowed(target_browser or "browser")
         return f"Status: Búsqueda iniciada con éxito en {disp_engine} para '{clean_query}'. (URL: {target_url})"
     except Exception as err:
         # Fallback to os.startfile on Windows
         if sys.platform == "win32" and hasattr(os, "startfile"):
             try:
                 os.startfile(target_url)
+                ensure_app_windowed(target_browser or "browser")
                 return f"Status: Búsqueda abierta en Windows shell en {disp_engine} para '{clean_query}'."
             except Exception:
                 pass

@@ -612,6 +612,70 @@ def restore_window(wid: int) -> bool:
     return False
 
 
+def ensure_windowed_mode(wid: int, default_w: int = 1180, default_h: int = 760) -> bool:
+    """
+    Ensures a target window is in floating windowed mode (not maximized or full-screen).
+    If the window is zoomed / maximized, restores it (SW_RESTORE) and resizes if needed.
+    """
+    if wid in _SIMULATED_WINDOWS:
+        _SIMULATED_WINDOWS[wid]["maximized"] = False
+        _SIMULATED_WINDOWS[wid]["minimized"] = False
+        return True
+
+    if sys.platform == "win32":
+        try:
+            import time
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+
+            # 1. Check if window is maximized (zoomed)
+            if user32.IsZoomed(wid):
+                SW_RESTORE = 9
+                user32.ShowWindow(wid, SW_RESTORE)
+                time.sleep(0.08)
+
+            # 2. Inspect rectangle bounds; if window is filling the entire monitor, resize to comfortable bounds
+            rect = wintypes.RECT()
+            if user32.GetWindowRect(wid, ctypes.byref(rect)):
+                w = rect.right - rect.left
+                h = rect.bottom - rect.top
+                sw = user32.GetSystemMetrics(0)
+                sh = user32.GetSystemMetrics(1)
+                if w >= sw - 20 or h >= sh - 50:
+                    new_w = min(default_w, sw - 120)
+                    new_h = min(default_h, sh - 120)
+                    new_x = max(60, (sw - new_w) // 2)
+                    new_y = max(40, (sh - new_h) // 2)
+                    user32.MoveWindow(wid, new_x, new_y, new_w, new_h, True)
+            return True
+        except Exception:
+            return False
+    elif _XLIB_AVAILABLE and _DISPLAY:
+        return _restore_window_x11(wid)
+    return False
+
+
+def ensure_app_windowed(app_name: str, attempts: int = 8, interval: float = 0.25) -> None:
+    """
+    Asynchronously monitors for newly opened application windows and enforces
+    windowed (non-maximized) display mode.
+    """
+    import threading
+    import time
+
+    def _worker():
+        for _ in range(attempts):
+            time.sleep(interval)
+            target = get_active_or_target_window(app_name)
+            if target:
+                wid, _ = target
+                ensure_windowed_mode(wid)
+                break
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 def get_window_title(wid: int) -> str:
     """Returns the title of the window identified by wid."""
     if wid in _SIMULATED_WINDOWS:

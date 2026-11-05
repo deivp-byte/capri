@@ -146,6 +146,32 @@ def parse_browser_or_search_request(text: str) -> Optional[Dict[str, Any]]:
                 "engine": target_part,
             }
 
+    # 3B. Pattern: "[busca|buscar|search] [en|por] <platform/browser> <query>"
+    # e.g. "busca en youtube lo fi chill", "busca en google recetas", "busca en brave noticias"
+    m_search_prefix = re.match(
+        r'^(?:por\s+favor\s+)?(?:busca|buscar|search|googlea|pon)\s+(?:en|por)\s+([a-zA-Z0-9_-]+)\s+(.+)$',
+        low
+    )
+    if m_search_prefix:
+        target_part = m_search_prefix.group(1).strip()
+        query_part = m_search_prefix.group(2).strip()
+
+        if target_part in KNOWN_SEARCH_PLATFORMS:
+            return {
+                "action": "browser_search",
+                "browser": "",
+                "query": query_part,
+                "engine": target_part,
+            }
+        if target_part in KNOWN_BROWSERS or any(b in target_part for b in ("brave", "chrome", "edge", "firefox", "navegador")):
+            b_key = "brave" if "brave" in target_part else ("chrome" if "chrome" in target_part else ("firefox" if "firefox" in target_part else "navegador"))
+            return {
+                "action": "browser_search",
+                "browser": b_key,
+                "query": query_part,
+                "engine": "google",
+            }
+
     # 4. Pattern: "[entra a|abre|accede a] <known_web_service>"
     # e.g. "abre youtube", "entra a twitch", "accede a github", "abre reddit"
     m_direct_web = re.match(
