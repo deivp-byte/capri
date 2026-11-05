@@ -752,12 +752,29 @@ class SpiderWindow(QWidget):
             self.animator.set_state("idle")
 
     def _send_to_floor(self) -> None:
-        """Teleports Spidey to rest above the taskbar."""
+        """Smoothly moves Spidey down to rest above the taskbar using dynamic animations without teleportation."""
         self._cancel_roam()
         self._perch_info = None
         floor_y = self.get_floor_y()
-        self.move(self.x(), floor_y)
-        self.animator.set_state("land")
+        dist_y = floor_y - self.y()
+
+        if abs(dist_y) < 25:
+            # Already at floor level: playful hop & land
+            self.animator.set_state("jump")
+            QTimer.singleShot(220, lambda: self.animator.set_state("land"))
+            QTimer.singleShot(750, lambda: self.animator.set_state("idle") if self.animator.current_state == "land" else None)
+            return
+
+        if dist_y > 110:
+            # High perch / elevated window: dynamic web-swing down to taskbar
+            screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
+            lateral_offset = 80 if self.x() < screen_x + screen_w / 2 else -80
+            target_x = max(screen_x + 30, min(screen_x + screen_w - self.SPRITE_WIDTH - 30, self.x() + lateral_offset))
+            self._start_auto_swing(custom_target=(target_x, floor_y), final_state="land")
+        else:
+            # Moderate height: leap down with gravity drop and land
+            self.animator.set_state("jump")
+            QTimer.singleShot(120, self._start_auto_descend_to_floor)
 
     def _open_commands_dialog(self) -> None:
         """Opens the custom commands / macros management dialog in a non-blocking floating window."""
@@ -1122,7 +1139,7 @@ class SpiderWindow(QWidget):
         """Jumps down from perched window or elevated ledge to the screen floor."""
         self._perch_info = None
         floor_y = self.get_floor_y()
-        if abs(self.y() - floor_y) < 30:
+        if abs(self.y() - floor_y) < 20:
             return
 
         self.animator.set_state("fall")
@@ -1401,9 +1418,53 @@ class SpiderWindow(QWidget):
 
         print(f"\nYou: {user_text}")
 
-        # Show thinking state in speech bubble and think animation
-        self.bubble.think(user_prompt=user_text)
-        self.animator.set_state("think")
+        # Check if user prompt is a native system action or tool invocation
+        from brain import _detect_action_intent
+        action_intent = _detect_action_intent(user_text)
+        if action_intent:
+            fn_name = action_intent.function.name
+            args = action_intent.function.arguments if hasattr(action_intent.function, "arguments") else {}
+            if isinstance(args, str):
+                try:
+                    import json
+                    args = json.loads(args)
+                except Exception:
+                    args = {}
+
+            # Expressive animations & immediate visual feedback
+            if fn_name in ("abrir_aplicacion", "open_app", "launch_app"):
+                app_target = (args.get("app_name") or args.get("app") or "la aplicación").capitalize()
+                self.animator.set_state("web_shoot")
+                QTimer.singleShot(480, lambda: self.animator.set_state("work") if self.animator.current_state in ("web_shoot", "web_hang") else None)
+                self.bubble.action_notice(f"🕸️ ¡Lanzando telaraña para abrir {app_target} en ventana!...", user_prompt=user_text)
+
+            elif fn_name in ("browser_search", "web_search", "open_website"):
+                q_target = args.get("query") or args.get("q") or "la red"
+                b_target = (args.get("browser") or "el navegador").capitalize()
+                self.animator.set_state("web_shoot")
+                QTimer.singleShot(480, lambda: self.animator.set_state("work") if self.animator.current_state in ("web_shoot", "web_hang") else None)
+                self.bubble.action_notice(f"🕸️ ¡Entrando a {b_target} para buscar '{q_target}'!...", user_prompt=user_text)
+
+            elif fn_name in ("run_custom_command", "execute_custom_command"):
+                cmd_name = args.get("name") or "comanda"
+                self.animator.set_state("work")
+                self.bubble.action_notice(f"⚡ ¡Ejecutando comanda '{cmd_name}' a toda mecha!...", user_prompt=user_text)
+
+            elif fn_name in ("perch_window", "perch"):
+                self.animator.set_state("jump")
+                self.bubble.action_notice("🕷️ ¡Subiendo a posarme en la ventana!...", user_prompt=user_text)
+
+            elif fn_name in ("set_volume", "adjust_volume"):
+                self.animator.set_state("point")
+                self.bubble.action_notice("🔊 ¡Ajustando los decibelios del sistema!...", user_prompt=user_text)
+
+            else:
+                self.animator.set_state("work")
+                self.bubble.action_notice("🕸️ ¡Marchando orden en el sistema!...", user_prompt=user_text)
+        else:
+            # General conversation: show thinking state in speech bubble and think animation
+            self.bubble.think(user_prompt=user_text)
+            self.animator.set_state("think")
 
         # Launch inference in background thread
         self._current_worker = BrainWorker(self.brain, user_text)
