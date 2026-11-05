@@ -17,12 +17,12 @@ un proveedor externo.
 
 - Python 3.10 o superior.
 - Ollama instalado y disponible en `http://localhost:11434`.
-- El modelo `llama3.2:3b` descargado en Ollama.
+- El modelo `qwen2.5:3b` descargado en Ollama.
 - En Linux, una sesión gráfica X11 para las funciones de gestión de ventanas.
 - En Windows, las funciones de gestión de ventanas usan las APIs nativas del
   sistema.
 
-El modelo `llama3.2:3b` es el modelo configurado por defecto en
+El modelo `qwen2.5:3b` es el modelo configurado por defecto en
 [`config.py`](./config.py). La configuración limita el contexto y la cantidad
 de tokens para reducir el consumo de memoria y mantener respuestas breves,
 adecuadas para la burbuja del personaje.
@@ -49,7 +49,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 Ejecuta exactamente:
 
 ```powershell
-ollama pull llama3.2:3b
+ollama pull qwen2.5:3b
 ```
 
 Comprueba que el modelo se haya instalado:
@@ -58,7 +58,7 @@ Comprueba que el modelo se haya instalado:
 ollama list
 ```
 
-El nombre debe aparecer como `llama3.2:3b`. No es necesario ejecutar `ollama
+El nombre debe aparecer como `qwen2.5:3b`. No es necesario ejecutar `ollama
 run` de forma permanente; la aplicación usa la API local de Ollama y carga el
 modelo cuando lo necesita.
 
@@ -139,7 +139,7 @@ predeterminados. Entre los ajustes disponibles están:
     "language": "es",
     "ollama": {
         "host": "http://localhost:11434",
-        "model": "llama3.2:3b",
+        "model": "qwen2.5:3b",
         "keep_alive": "5m",
         "num_ctx": 2048,
         "temperature": 0.7,
@@ -182,7 +182,7 @@ ollama list
 Si el modelo no aparece, vuelve a descargarlo:
 
 ```powershell
-ollama pull llama3.2:3b
+ollama pull qwen2.5:3b
 ```
 
 Si has cambiado el host o el puerto de Ollama, actualiza
