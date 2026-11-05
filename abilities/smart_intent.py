@@ -1,12 +1,13 @@
 """
 Smart Semantic Intent Parser: Expands Spider-Man / Capri's comprehension
-of natural language desktop and browser requests.
+of natural language desktop, browser, and file system requests.
 Handles compound instructions, preposition variations ("en brave busca youtube"),
-browser targeting, web service routing, and multi-step chained actions.
+browser targeting, web service routing, file/folder navigation, and proactive advice.
 """
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Optional, Tuple, Dict, Any, List
 
 from abilities.app_finder import KNOWN_WEB_SERVICES
@@ -214,5 +215,78 @@ def parse_compound_chained_request(text: str) -> Optional[List[str]]:
             action_verbs = ("abre", "abrir", "cierra", "cerrar", "minimiza", "maximiza", "pon", "ajusta", "busca", "silencia", "sube", "baja")
             if len(parts) >= 2 and all(any(p.lower().startswith(v) for v in action_verbs) for p in parts):
                 return parts
+
+    return None
+
+
+def parse_file_or_folder_request(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parses natural language requests to navigate, open, search or inspect files and folders:
+      - 'abre la carpeta descargas' -> open_folder('descargas')
+      - 'abre descargas' -> open_folder('descargas')
+      - 'abre el explorador de archivos' -> open_folder('')
+      - 'abre la carpeta del proyecto' -> open_folder('capri')
+      - 'qué hay en descargas' -> list_folder('descargas')
+      - 'qué tengo en documentos' -> list_folder('documentos')
+      - 'busca el archivo notas.txt' -> find_files('notas.txt')
+      - 'dónde está config.json' -> find_files('config.json')
+      - 'léeme el archivo config.json' -> read_file('config.json')
+      - 'dame un consejo' / 'alguna recomendación' -> care_advice()
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return None
+
+    # Normalize accents for resilient matching
+    nfkd = unicodedata.normalize("NFKD", raw)
+    clean = "".join(ch for ch in nfkd if not unicodedata.combining(ch)).lower().strip(" .!?¿¡")
+
+    # 1. Proactive Advice Request
+    if re.match(r'^(?:por favor\s+)?(?:dame\s+(?:un\s+)?consejo|algun\s+consejo|alguna\s+recomendacion|como\s+me\s+ves|que\s+opinas|que\s+tal\s+voy|sentido\s+aracnido)$', clean):
+        return {"action": "care_advice"}
+
+    # 2. Open Explorer directly
+    if re.match(r'^(?:por favor\s+)?(?:abre|abrir|open|entra a|accede a)\s+(?:el\s+explorador(?:\s+de\s+archivos)?|explorer)$', clean):
+        return {"action": "open_folder", "target": ""}
+
+    # 3. Open Specific Folder
+    m_open = re.match(
+        r'^(?:por favor\s+)?(?:abre|abrir|open|entra a|accede a)\s+(?:la\s+carpeta\s+(?:del?\s+)?|el\s+directorio\s+(?:del?\s+)?|el\s+folder\s+(?:del?\s+)?|mis\s+|el\s+|la\s+)?(descargas|downloads|documentos|documents|escritorio|desktop|imagenes|fotos|pictures|videos|musica|music|proyecto|capri|archivos|[a-z]:[\\/][a-z0-9_\\/.-]*)$',
+        clean
+    )
+    if m_open:
+        target_folder = m_open.group(1).strip()
+        return {"action": "open_folder", "target": target_folder}
+
+    # 4. List Folder Contents
+    m_list = re.match(
+        r'^(?:por favor\s+)?(?:(?:que\s+hay\s+en|que\s+tengo\s+en)\s+|lista\s+(?:los\s+archivos\s+(?:del?\s+)?|la\s+carpeta\s+(?:del?\s+)?|el\s+contenido\s+de\s+)|muestra\s+los\s+archivos\s+de\s+)(?:la\s+carpeta\s+(?:del?\s+)?|mis\s+|el\s+|la\s+)?([a-z0-9_:\\/.-]+)$',
+        clean
+    )
+    if m_list:
+        target_folder = m_list.group(1).strip()
+        return {"action": "list_folder", "target": target_folder}
+
+    # 5. Read / Explain File
+    m_read = re.match(
+        r'^(?:por favor\s+)?(?:lee|leeme|leer|que\s+dice|muestra\s+el\s+contenido\s+de)\s+(?:el\s+archivo\s+|el\s+fichero\s+)?([a-z0-9_:\\/.-]+\.[a-z0-9]+)$',
+        clean
+    )
+    if m_read:
+        target_file = m_read.group(1).strip()
+        return {"action": "read_file", "target": target_file}
+
+    # 6. Find / Locate File or Folder on PC
+    m_find = re.match(
+        r'^(?:por favor\s+)?(?:busca|buscar|encuentra|donde\s+esta|localiza|find)\s+(?:el\s+archivo\s+|la\s+carpeta\s+|el\s+fichero\s+)?([a-z0-9_.-]+(?:\.[a-z0-9]+)?)(?:\s+en\s+el\s+(?:pc|ordenador|disco|sistema)|\s+en\s+mis\s+archivos)?$',
+        clean
+    )
+    if m_find:
+        query_file = m_find.group(1).strip()
+        if not any(clean.endswith(web) for web in ("en google", "en youtube", "en internet", "en la web", "en brave", "en chrome")):
+            has_ext = "." in query_file and not query_file.endswith(".")
+            has_explicit_term = any(w in clean for w in ("archivo", "fichero", "carpeta", "donde esta", "en el pc", "en el ordenador"))
+            if has_ext or has_explicit_term:
+                return {"action": "find_files", "query": query_file}
 
     return None

@@ -901,6 +901,13 @@ def interact_window(action: str = "move", app_name: str = "", direction: str = "
 # ==============================================================================
 
 from abilities.agent_interaction import browser_search, type_in_app, press_hotkey
+from abilities.file_explorer import (
+    open_folder,
+    list_folder_contents,
+    search_and_format_files,
+    read_file_preview,
+)
+from abilities.care_advisor import get_proactive_advice
 from abilities.custom_commands import (
     find_matching_command,
     get_command,
@@ -992,6 +999,10 @@ AVAILABLE_TOOLS: List[Callable] = [
     browser_search,
     type_in_app,
     press_hotkey,
+    open_folder,
+    list_folder_contents,
+    search_and_format_files,
+    read_file_preview,
     run_custom_command,
     manage_custom_commands,
     play_song,
@@ -1023,6 +1034,20 @@ TOOL_REGISTRY: Dict[str, Callable] = {
     "browser_search": browser_search,
     "navegador_buscar": browser_search,
     "buscar_en_navegador": browser_search,
+    "open_folder": open_folder,
+    "abrir_carpeta": open_folder,
+    "open_directory": open_folder,
+    "list_folder": list_folder_contents,
+    "listar_carpeta": list_folder_contents,
+    "ver_carpeta": list_folder_contents,
+    "find_files": search_and_format_files,
+    "buscar_archivos": search_and_format_files,
+    "buscar_archivo": search_and_format_files,
+    "read_file": read_file_preview,
+    "leer_archivo": read_file_preview,
+    "care_advice": lambda **kw: get_proactive_advice(force=True),
+    "consejo": lambda **kw: get_proactive_advice(force=True),
+    "sentido_aracnido": lambda **kw: get_proactive_advice(force=True),
     "type_in_app": type_in_app,
     "type_text": type_in_app,
     "escribir_texto": type_in_app,
@@ -1128,6 +1153,22 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
             }))
         elif act_name == "open_website":
             return SyntheticToolCall(SyntheticFunction("open_website", {"url": smart_nav["url"]}))
+
+    # 1.05 File System Navigation & Folder Inspection & Proactive Advice
+    from abilities.smart_intent import parse_file_or_folder_request
+    file_intent = parse_file_or_folder_request(t)
+    if file_intent:
+        act = file_intent.get("action")
+        if act == "open_folder":
+            return SyntheticToolCall(SyntheticFunction("open_folder", {"target": file_intent.get("target", "")}))
+        elif act == "list_folder":
+            return SyntheticToolCall(SyntheticFunction("list_folder", {"target": file_intent.get("target", "")}))
+        elif act == "find_files":
+            return SyntheticToolCall(SyntheticFunction("find_files", {"query": file_intent.get("query", "")}))
+        elif act == "read_file":
+            return SyntheticToolCall(SyntheticFunction("read_file", {"target": file_intent.get("target", "")}))
+        elif act == "care_advice":
+            return SyntheticToolCall(SyntheticFunction("care_advice", {}))
 
     # 1.1 In-app typing (typing text into active window, browser search bar, chat, editor)
     type_match = re.search(

@@ -87,7 +87,8 @@ class BrainWorker(QThread):
 class SpriteAnimator:
     """
     High-fidelity state engine controlling all 30 pixel-art Spider-Man animations.
-    Loads metadata (FPS, loop, transitions) directly from animations.json.
+    Loads metadata (FPS, loop, transitions, pivots, webOrigin) directly from animations.json manifest.
+    Synthesizes software variants (e.g. 'climb_down') and handles directional mirroring.
     """
 
     def __init__(self, base_dir: Path) -> None:
@@ -129,12 +130,29 @@ class SpriteAnimator:
                     "loop": meta.get("loop", True),
                     "next": meta.get("next"),
                     "frames": pixmaps,
+                    "frame_data": meta.get("frames", []),
                 }
 
+        # Synthesize software animation variants as defined in sprite documentation
+        if "climb" in self.animations:
+            climb = self.animations["climb"]
+            self.animations["climb_down"] = {
+                "fps": climb["fps"],
+                "loop": True,
+                "next": None,
+                "frames": list(reversed(climb["frames"])),
+                "frame_data": list(reversed(climb.get("frame_data", []))),
+            }
+
     def set_state(self, state: str) -> None:
-        """Switches to a new animation state if recognized, with aliases."""
+        """Switches to a new animation state if recognized, with aliases and directional suffixes."""
         target_state = state
-        if state not in self.animations:
+        if target_state.endswith("_left") or target_state.endswith("_right"):
+            base = target_state.rsplit("_", 1)[0]
+            if base in self.animations:
+                target_state = base
+
+        if target_state not in self.animations:
             aliases = {
                 "swing": "web_swing",
                 "shoot": "web_shoot",
@@ -142,8 +160,19 @@ class SpriteAnimator:
                 "pull_effort": "work",
                 "effort": "work",
                 "push": "work",
+                "crouch": "sit",
+                "rest": "sit",
+                "nap": "sleep",
+                "alert": "surprise",
+                "tingle": "surprise",
+                "shock": "surprise",
+                "cheer": "success",
+                "praise": "success",
+                "descend": "climb_down",
+                "web_descend": "web_hang",
+                "crawl": "ceiling_crawl",
             }
-            target_state = aliases.get(state, state)
+            target_state = aliases.get(target_state, target_state)
 
         if target_state in self.animations and target_state != self.current_state:
             self.current_state = target_state
@@ -191,6 +220,42 @@ class SpriteAnimator:
         if anim and anim["frames"]:
             return anim["frames"][self.current_frame % len(anim["frames"])]
         return None
+
+    def current_web_origin(self) -> QPointF | None:
+        """Returns pixel-accurate vector web origin from manifest frame metadata."""
+        anim = self.animations.get(self.current_state)
+        if not anim:
+            return None
+        frame_data = anim.get("frame_data", [])
+        if not frame_data:
+            return None
+        idx = self.current_frame % len(frame_data)
+        fdata = frame_data[idx]
+        origin = fdata.get("webOrigin")
+        if not origin:
+            return None
+        scale = 140.0 / 128.0
+        wx = origin["x"] * scale
+        wy = 10.0 + (origin["y"] * scale)
+        return QPointF(wx, wy)
+
+    def current_pivot(self) -> QPointF | None:
+        """Returns contact pivot from manifest frame metadata."""
+        anim = self.animations.get(self.current_state)
+        if not anim:
+            return None
+        frame_data = anim.get("frame_data", [])
+        if not frame_data:
+            return None
+        idx = self.current_frame % len(frame_data)
+        fdata = frame_data[idx]
+        piv = fdata.get("pivot")
+        if not piv:
+            return None
+        scale = 140.0 / 128.0
+        wx = piv["x"] * scale
+        wy = 10.0 + (piv["y"] * scale)
+        return QPointF(wx, wy)
 
 
 # ==============================================================================
@@ -341,6 +406,13 @@ class SpiderWindow(QWidget):
         # Setup Speech Bubble
         self.bubble = SpiderBubble(self)
         self.bubble.submitted.connect(self._handle_user_submit)
+        self.bubble.user_typing.connect(self._on_user_typing)
+        self.bubble.typing_finished.connect(self._on_speech_finished)
+
+        # Typing silence timer: returns from 'listen' to 'idle' when typing pauses
+        self._typing_idle_timer = QTimer(self)
+        self._typing_idle_timer.setSingleShot(True)
+        self._typing_idle_timer.timeout.connect(self._on_typing_idle)
 
         # 60 FPS animation loop for sprite frames
         self.anim_timer = QTimer(self)
@@ -434,6 +506,15 @@ class SpiderWindow(QWidget):
 
     def get_hand_pos(self) -> QPoint:
         """Returns Spidey's hand position relative to SpiderWindow based on current animation state and facing direction."""
+        # 1. Use pixel-accurate frame webOrigin from manifest when available
+        origin = self.animator.current_web_origin()
+        if origin is not None:
+            ox = origin.x()
+            if self.facing_left:
+                ox = self.SPRITE_WIDTH - ox
+            return QPoint(int(ox), int(origin.y()))
+
+        # 2. State-specific hand positioning fallback
         state = self.animator.current_state
         if state in ("web_shoot", "shoot"):
             hand = QPoint(int(self.SPRITE_WIDTH * 0.72), int(self.SPRITE_HEIGHT * 0.50))
@@ -441,6 +522,8 @@ class SpiderWindow(QWidget):
             hand = QPoint(int(self.SPRITE_WIDTH * 0.50), int(self.SPRITE_HEIGHT * 0.12))
         elif state in ("drag", "work"):
             hand = QPoint(int(self.SPRITE_WIDTH * 0.55), int(self.SPRITE_HEIGHT * 0.40))
+        elif state in ("point",):
+            hand = QPoint(int(self.SPRITE_WIDTH * 0.75), int(self.SPRITE_HEIGHT * 0.38))
         else:
             hand = QPoint(int(self.SPRITE_WIDTH * 0.50), int(self.SPRITE_HEIGHT * 0.45))
 
@@ -637,6 +720,25 @@ class SpiderWindow(QWidget):
     # MOUSE EVENTS: WINDOW DRAGGING & ANIMATION STATE HOOKS
     # --------------------------------------------------------------------------
 
+    def enterEvent(self, event) -> None:
+        """When mouse cursor hovers over Spidey, he peeks curiously if idle."""
+        super().enterEvent(event)
+        if (
+            not self.is_roaming_moving
+            and not self._choreo_timer.isActive()
+            and self._drag_pos is None
+            and not self.bubble.isVisible()
+        ):
+            if self.animator.current_state == "idle":
+                self.animator.set_state("peek")
+                QTimer.singleShot(2200, lambda: self.animator.set_state("idle") if self.animator.current_state == "peek" else None)
+
+    def leaveEvent(self, event) -> None:
+        """Restores idle state when mouse cursor leaves widget."""
+        super().leaveEvent(event)
+        if self.animator.current_state == "peek":
+            self.animator.set_state("idle")
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Captures mouse click position, cancels autonomous roam, and triggers drag animation."""
         self._cancel_roam()
@@ -647,6 +749,7 @@ class SpiderWindow(QWidget):
             if self._choreo_timer.isActive():
                 self._finish_choreography("drag")
 
+            self._drag_start_pos = event.globalPosition().toPoint()
             self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             self.animator.set_state("drag")
             event.accept()
@@ -664,13 +767,54 @@ class SpiderWindow(QWidget):
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        """Triggers released -> land -> idle transition upon mouse release."""
+        """Handles click vs drag release: keeps Spidey in place wherever the user dropped him."""
         if event.button() == Qt.LeftButton:
+            drag_start = getattr(self, "_drag_start_pos", None)
+            curr_pos = event.globalPosition().toPoint()
             self._drag_pos = None
-            if "released" in self.animator.animations:
-                self.animator.set_state("released")
+
+            dist_moved = 0.0
+            if drag_start is not None:
+                dist_moved = math.hypot(curr_pos.x() - drag_start.x(), curr_pos.y() - drag_start.y())
+
+            if dist_moved < 6.0:
+                # Interactive single click on Spider-Man!
+                self._handle_spidey_click()
             else:
-                self.animator.set_state("idle")
+                # User dragged Spidey to a specific spot:
+                # KEEP SPIDEY IN PLACE WHEREVER HE IS DROPPED!
+                screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
+                floor_y = self.get_floor_y()
+
+                drop_x = max(screen_x + 5, min(screen_x + screen_w - self.SPRITE_WIDTH - 5, self.x()))
+                drop_y = max(screen_y + 5, min(floor_y, self.y()))
+                self.move(drop_x, drop_y)
+                self.bubble.reposition()
+
+                # Contextual pose according to drop location:
+                # 1. Close to ceiling (drop_y <= screen_y + 45): latch onto ceiling!
+                if drop_y <= screen_y + 45:
+                    self.animator.set_state("ceiling_crawl" if random.random() < 0.5 else "web_hang")
+
+                # 2. Close to left or right wall edge: cling to wall in wall_idle!
+                elif drop_x <= screen_x + 25:
+                    self.facing_left = True
+                    self.animator.set_state("wall_idle")
+                elif drop_x >= screen_x + screen_w - self.SPRITE_WIDTH - 25:
+                    self.facing_left = False
+                    self.animator.set_state("wall_idle")
+
+                # 3. Close to floor (drop_y >= floor_y - 20): snap to floor with land squash
+                elif drop_y >= floor_y - 20:
+                    self.move(drop_x, floor_y)
+                    self.animator.set_state("land")
+                    QTimer.singleShot(320, lambda: self.animator.set_state("idle") if self.animator.current_state == "land" else None)
+
+                # 4. Anywhere else across desktop space: stay right where dropped!
+                else:
+                    self.animator.set_state("released")
+                    QTimer.singleShot(220, lambda: self.animator.set_state("idle") if self.animator.current_state == "released" else None)
+
             self.update()
             self.last_user_touch = time.monotonic()
             self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
@@ -681,17 +825,106 @@ class SpiderWindow(QWidget):
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Double clicking triggers friendly wave and opens speech bubble."""
         self._cancel_roam()
-        if "web_shoot" in self.animator.animations:
-            self.animator.set_state("web_shoot")
-        else:
+        if "wave" in self.animator.animations:
             self.animator.set_state("wave")
+        else:
+            self.animator.set_state("web_shoot")
         self.bubble.say("¡Listo para la acción! Lanza tus preguntas científicas o comandos de patrulla.", "")
         event.accept()
 
+    def _handle_spidey_click(self) -> None:
+        """Interactive click: wakes up from rest or plays expressive reactive gestures."""
+        self._cancel_roam()
+        curr = self.animator.current_state
+
+        if curr in ("sleep", "sit"):
+            self.animator.set_state("wake")
+            QTimer.singleShot(420, lambda: self.animator.set_state("wave"))
+            self.bubble.say("¡Uff! Despierto y al 100%. ¿Qué patrullamos hoy en el escritorio?", "")
+        else:
+            gestures = ["wave", "surprise", "peek", "point", "read", "search"]
+            chosen = random.choice([g for g in gestures if g in self.animator.animations])
+            self.animator.set_state(chosen)
+
+            quips = {
+                "wave": "¡Hola, vecino! Spider-Man al aparato listo para patrullar.",
+                "surprise": "¡Mi sentido arácnido vibró! ¿Has hecho clic por una emergencia?",
+                "peek": "¡Ojo avizor! Vigilando cada rincón de tus ventanas.",
+                "point": "¡Ese icono de ahí parece sospechoso! ¿Lo investigamos?",
+                "read": "Revisando mis notas científicas del laboratorio... ¡Dime qué necesitas!",
+                "search": "Escaneando el horizonte con mis binoculares arácnidos... ¡Todo despejado!",
+            }
+            self.bubble.say(quips.get(chosen, "¡Listo para la acción!"), "")
+
+            anim_meta = self.animator.animations.get(chosen, {})
+            if anim_meta.get("loop", False):
+                QTimer.singleShot(2600, lambda: self.animator.set_state("idle") if self.animator.current_state == chosen else None)
+
+    def _start_gravity_drop(self) -> None:
+        """
+        Executes signature mid-air release & gravity drop sequence:
+        1. 'released' reaction frame in mid-air (~200ms)
+        2. 'fall' animation with accelerating downward physics
+        3. 'land' impact squash on floor (~350ms)
+        4. Smooth return to 'idle'
+        """
+        self._cancel_roam()
+        self.animator.set_state("released" if "released" in self.animator.animations else "fall")
+
+        def _begin_fall():
+            if self._drag_pos is not None:
+                return  # User grabbed Spidey again
+            self.animator.set_state("fall")
+            floor_y = self.get_floor_y()
+            self.is_roaming_moving = True
+            self._current_roam_action = {
+                "type": "physics_drop",
+                "x": self.x(),
+                "vy": 2.5,
+                "gravity": 1.5,
+                "target_y": floor_y,
+            }
+            self._roam_motion_timer.start(16)
+
+        QTimer.singleShot(200, _begin_fall)
+
+    def _on_user_typing(self) -> None:
+        """When user types into the chat input, Spider-Man listens attentively."""
+        if self._choreo_timer.isActive() or self._drag_pos is not None or self.is_roaming_moving:
+            return
+
+        # Face towards the speech bubble
+        if self.bubble.isVisible():
+            self.facing_left = (self.bubble.geometry().center().x() < self.geometry().center().x())
+
+        # Wake up if asleep or resting
+        if self.animator.current_state in ("sleep", "sit"):
+            self.animator.set_state("wake")
+            QTimer.singleShot(420, lambda: self.animator.set_state("listen"))
+        elif self.animator.current_state not in ("talk", "work", "web_shoot"):
+            self.animator.set_state("listen")
+
+        self._typing_idle_timer.start(3200)
+
+    def _on_typing_idle(self) -> None:
+        """If user pauses typing without sending, return to idle."""
+        if self.animator.current_state == "listen":
+            self.animator.set_state("idle")
+
+    def _on_speech_finished(self) -> None:
+        """When typewriter finishes streaming reply text, return smoothly to idle."""
+        if self.animator.current_state == "talk":
+            QTimer.singleShot(1200, lambda: self.animator.set_state("idle") if self.animator.current_state == "talk" else None)
+
+    def on_bubble_dismissed(self) -> None:
+        """When bubble closes, ensure character returns to idle or sits comfortably."""
+        if self.animator.current_state in ("talk", "listen", "think"):
+            self.animator.set_state("idle")
+
     def contextMenuEvent(self, event) -> None:
-        """Right-click context menu offering interactive Spidey controls."""
+        """Right-click context menu: clean, compact, and organized."""
         menu = QMenu(self)
-        menu.setStyleSheet("""
+        menu_style = """
             QMenu {
                 background-color: #12101a;
                 color: #f5f0fa;
@@ -701,43 +934,79 @@ class SpiderWindow(QWidget):
                 font-size: 12px;
             }
             QMenu::item {
-                padding: 6px 20px;
+                padding: 6px 22px;
                 border-radius: 3px;
             }
             QMenu::item:selected {
                 background-color: #ff2e70;
                 color: #ffffff;
             }
-        """)
+            QMenu::separator {
+                height: 1px;
+                background-color: rgba(255, 46, 112, 60);
+                margin: 4px 8px;
+            }
+        """
+        menu.setStyleSheet(menu_style)
 
+        # 1. Chat interaction
         chat_act = menu.addAction("💬 Hablar con Spider-Man")
         chat_act.triggered.connect(lambda: self.bubble.say("¡Hey! ¿Qué pasa por ese cerebro de genio hoy?", ""))
 
         menu.addSeparator()
 
-        roam_act = menu.addAction("🕷️ Patrulla autónoma (Roaming)")
+        # 2. Key desktop pet controls
+        roam_act = menu.addAction("🕷️ Patrulla autónoma")
         roam_act.setCheckable(True)
         roam_act.setChecked(self.roaming_enabled)
         roam_act.toggled.connect(self._toggle_roaming)
 
-        perch_act = menu.addAction("🧗 Posarse en ventana activa (Perch)")
+        perch_act = menu.addAction("🧗 Posarse en ventana activa")
         perch_act.triggered.connect(lambda: self.perch_on_window())
 
         swing_act = menu.addAction("🕸️ Lanzar telaraña y balancearse")
         swing_act.triggered.connect(lambda: self._start_auto_swing())
 
-        rest_act = menu.addAction("☕ Sentarse a descansar")
-        rest_act.triggered.connect(lambda: self._start_auto_rest(is_nap=False))
-
-        floor_act = menu.addAction("⬇️ Ir a la barra de tareas (Suelo)")
+        floor_act = menu.addAction("⬇️ Bajar a la barra de tareas")
         floor_act.triggered.connect(self._send_to_floor)
 
         menu.addSeparator()
 
-        cmd_act = menu.addAction("⚡ Comandas personalizadas (Macros)...")
-        cmd_act.triggered.connect(self._open_commands_dialog)
+        # 3. Compact Submenu: Gestos y acrobacias manuales
+        poses_menu = menu.addMenu("🎭 Gestos y acrobacias")
+        poses_menu.setStyleSheet(menu_style)
+
+        wave_act = poses_menu.addAction("👋 Saludar")
+        wave_act.triggered.connect(lambda: self._start_auto_gesture("wave"))
+
+        crawl_act = poses_menu.addAction("🕸️ Avanzar por el techo")
+        crawl_act.triggered.connect(self._start_auto_ceiling_crawl)
+
+        climb_act = poses_menu.addAction("🧗 Escalar pared")
+        climb_act.triggered.connect(self._start_auto_climb)
+
+        search_act = poses_menu.addAction("🔍 Buscar con binoculares")
+        search_act.triggered.connect(lambda: self._start_auto_gesture("search"))
+
+        read_act = poses_menu.addAction("📖 Leer notas científicas")
+        read_act.triggered.connect(lambda: self._start_auto_gesture("read"))
+
+        win_act = poses_menu.addAction("⚡ Celebrar victoria")
+        win_act.triggered.connect(lambda: self._start_auto_gesture("success"))
+
+        poses_menu.addSeparator()
+
+        rest_act = poses_menu.addAction("☕ Sentarse a descansar")
+        rest_act.triggered.connect(lambda: self._start_auto_rest(is_nap=False))
+
+        nap_act = poses_menu.addAction("💤 Echarse una siesta")
+        nap_act.triggered.connect(lambda: self._start_auto_rest(is_nap=True))
 
         menu.addSeparator()
+
+        # 4. Utilities & Exit
+        cmd_act = menu.addAction("⚡ Comandas personalizadas...")
+        cmd_act.triggered.connect(self._open_commands_dialog)
 
         quit_act = menu.addAction("❌ Salir")
         quit_act.triggered.connect(self.close)
@@ -823,8 +1092,9 @@ class SpiderWindow(QWidget):
             self.next_spontaneous_speech = now + random.uniform(30.0, 60.0)
             return
 
+        from abilities.care_advisor import get_proactive_advice
         from abilities.spontaneous_talk import get_spontaneous_chatter
-        line = get_spontaneous_chatter()
+        line = get_proactive_advice() or get_spontaneous_chatter()
         if line:
             self.animator.set_state("talk" if "talk" in self.animator.animations else "idle")
             self.bubble.say(line, "")
@@ -858,24 +1128,30 @@ class SpiderWindow(QWidget):
             self._start_auto_descend_to_floor()
             return
 
-        # Natural, peaceful behavior distribution: mostly sits, perches, or gestures at current spot
+        # Natural, peaceful behavior distribution: sits, perches, gestures, hangs, climbs or crawls
         roll = random.random()
 
-        if roll < 0.35:
+        if roll < 0.28:
             # Sit down or take a restful nap (calm idle state)
-            self._start_auto_rest(is_nap=(roll < 0.15))
-        elif roll < 0.65:
+            self._start_auto_rest(is_nap=(roll < 0.12))
+        elif roll < 0.52:
             # Perch on an open window frame
             if not self._start_auto_perch():
                 self._start_auto_gesture()
-        elif roll < 0.82:
-            # Play a short friendly gesture at current spot without walking
+        elif roll < 0.68:
+            # Play a short friendly gesture (read, search, wave, peek, point, surprise)
             self._start_auto_gesture()
-        elif roll < 0.92:
+        elif roll < 0.78:
             # Web hang upside down
             self._start_auto_hang()
+        elif roll < 0.88:
+            # Ceiling crawl or wall climb
+            if roll < 0.83:
+                self._start_auto_ceiling_crawl()
+            else:
+                self._start_auto_climb()
         else:
-            # Only rarely walk or run across the floor
+            # Walk or run across the floor with dynamic skid braking
             self._start_auto_walk()
 
     def _update_perch_follow(self) -> None:
@@ -958,10 +1234,19 @@ class SpiderWindow(QWidget):
                     self.animator.set_state(settled)
 
     def _start_auto_walk(self) -> None:
-        """Walks or runs along the desktop floor/taskbar to a new X position."""
+        """Walks or runs along the desktop floor/taskbar, or swings across if elevated."""
         screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
         floor_y = self.get_floor_y()
         current_x = self.x()
+
+        # If Spidey is positioned in mid-air (not on the floor), swing or crawl across instead of dropping
+        if abs(self.y() - floor_y) > 40 and self._perch_info is None:
+            if self.y() <= screen_y + 60:
+                self._start_auto_ceiling_crawl()
+            else:
+                target_x = random.randint(screen_x + 60, screen_x + screen_w - self.SPRITE_WIDTH - 60)
+                self._start_auto_swing(custom_target=(target_x, self.y()), final_state="idle")
+            return
 
         min_x = screen_x + 20
         max_x = screen_x + screen_w - self.SPRITE_WIDTH - 20
@@ -1006,7 +1291,12 @@ class SpiderWindow(QWidget):
                 target_x = random.randint(int(screen_x + screen_w * 0.55), int(screen_x + screen_w - self.SPRITE_WIDTH - 40))
             else:
                 target_x = random.randint(int(screen_x + 40), int(screen_x + screen_w * 0.45))
-            target_y = floor_y
+
+            # If Spidey is positioned off the floor, swing between desktop altitudes
+            if abs(start_pt.y() - floor_y) > 50 and self._perch_info is None:
+                target_y = random.randint(screen_y + 100, max(screen_y + 110, floor_y - 60))
+            else:
+                target_y = floor_y
 
         dist = target_x - start_pt.x()
         self.facing_left = (dist < 0)
@@ -1167,11 +1457,76 @@ class SpiderWindow(QWidget):
         if self.animator.current_state in ("sleep", "sit") and not self._drag_pos and not self.bubble.isVisible():
             self.animator.set_state("wake")
 
-    def _start_auto_gesture(self) -> None:
-        """Plays friendly gestures like waving, peeking, pointing or reading."""
-        gestures = ["wave", "peek", "point", "surprise", "read"]
+    def _start_auto_ceiling_crawl(self) -> None:
+        """Shoots a web to ceiling, zips up, crawls horizontally along desktop ceiling, and drops down."""
+        self._cancel_roam()
+        screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
+        start_pt = self.pos()
+
+        anchor_x = float(start_pt.x() + self.SPRITE_WIDTH // 2)
+        anchor_y = float(screen_y)
+
+        self.web_active = True
+        self.web_end_point = QPointF(anchor_x, anchor_y)
+        self.web_start_point = self.get_hand_global_pos()
+        self.web_sag = 0.0
+        self.web_overlay.show()
+        self.web_overlay.update()
+
+        target_crawl_y = screen_y + 2
+        self.animator.set_state("web_shoot")
+        self.is_roaming_moving = True
+
+        crawl_dir = -1 if start_pt.x() > screen_x + screen_w // 2 else 1
+        crawl_dist = random.randint(180, 320) * crawl_dir
+        target_crawl_x = max(screen_x + 30, min(screen_x + screen_w - self.SPRITE_WIDTH - 30, start_pt.x() + crawl_dist))
+
+        self.facing_left = (crawl_dist < 0)
+
+        self._current_roam_action = {
+            "type": "ceiling_crawl_sequence",
+            "phase": "pull_up",
+            "start_x": start_pt.x(),
+            "start_y": start_pt.y(),
+            "target_crawl_y": target_crawl_y,
+            "target_crawl_x": target_crawl_x,
+            "crawl_speed": 3.0 if crawl_dist > 0 else -3.0,
+            "frame": 0,
+            "pull_frames": 22,
+        }
+        self._roam_motion_timer.start(16)
+
+    def _start_auto_climb(self) -> None:
+        """Scales the side border of the screen, clings in wall_idle, and climbs down."""
+        self._cancel_roam()
+        screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
+        floor_y = self.get_floor_y()
+
+        is_left = self.x() < screen_x + screen_w // 2
+        edge_x = screen_x + 8 if is_left else screen_x + screen_w - self.SPRITE_WIDTH - 8
+        self.facing_left = is_left
+
+        climb_target_y = max(screen_y + 120, floor_y - 320)
+        self.move(edge_x, floor_y)
+        self.animator.set_state("climb")
+        self.is_roaming_moving = True
+
+        self._current_roam_action = {
+            "type": "climb_sequence",
+            "phase": "climbing_up",
+            "edge_x": edge_x,
+            "start_y": floor_y,
+            "target_y": climb_target_y,
+            "speed_y": -3.0,
+            "climb_until": 0.0,
+        }
+        self._roam_motion_timer.start(16)
+
+    def _start_auto_gesture(self, specific_gesture: str | None = None) -> None:
+        """Plays friendly gestures like waving, peeking, pointing, reading or scouting."""
+        gestures = ["wave", "peek", "point", "surprise", "read", "search", "success"]
         available = [g for g in gestures if g in self.animator.animations]
-        chosen = random.choice(available) if available else "wave"
+        chosen = specific_gesture if (specific_gesture and specific_gesture in self.animator.animations) else (random.choice(available) if available else "wave")
         self.animator.set_state(chosen)
         anim_meta = self.animator.animations.get(chosen, {})
         if anim_meta.get("loop", False):
@@ -1206,10 +1561,93 @@ class SpiderWindow(QWidget):
             reached = (c["speed"] > 0 and curr_x >= target_x) or (c["speed"] < 0 and curr_x <= target_x)
             if reached:
                 self.move(int(target_x), int(c["y"]))
-                self._finish_roam_motion("brake")
+                self.animator.set_state("brake")
+                self._roam_motion_timer.stop()
+                self.is_roaming_moving = False
+                self._current_roam_action = None
+                QTimer.singleShot(400, lambda: self.animator.set_state("idle") if self.animator.current_state == "brake" else None)
                 self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
             else:
                 self.move(int(curr_x), int(c["y"]))
+
+        elif action_type == "physics_drop":
+            c["vy"] += c["gravity"]
+            new_y = self.y() + c["vy"]
+            if new_y >= c["target_y"]:
+                self.move(int(c["x"]), int(c["target_y"]))
+                self._finish_roam_motion("land")
+                QTimer.singleShot(350, lambda: self.animator.set_state("idle") if self.animator.current_state == "land" else None)
+                self.next_roam_time = time.monotonic() + random.uniform(40.0, 80.0)
+            else:
+                self.move(int(c["x"]), int(new_y))
+
+        elif action_type == "ceiling_crawl_sequence":
+            phase = c["phase"]
+            if phase == "pull_up":
+                c["frame"] += 1
+                prog = min(1.0, c["frame"] / c["pull_frames"])
+                curr_y = c["start_y"] + (c["target_crawl_y"] - c["start_y"]) * math.sin(prog * math.pi / 2.0)
+                self.move(int(c["start_x"]), int(curr_y))
+                self.web_start_point = self.get_hand_global_pos()
+                self.web_overlay.update()
+                if prog >= 1.0:
+                    c["phase"] = "crawling"
+                    self.web_active = False
+                    self.web_overlay.hide()
+                    self.animator.set_state("ceiling_crawl")
+
+            elif phase == "crawling":
+                curr_x = self.x() + c["crawl_speed"]
+                target_x = c["target_crawl_x"]
+                reached = (c["crawl_speed"] > 0 and curr_x >= target_x) or (c["crawl_speed"] < 0 and curr_x <= target_x)
+                if reached:
+                    self.move(int(target_x), int(c["target_crawl_y"]))
+                    c["phase"] = "drop_down"
+                    self.animator.set_state("fall")
+                    c["drop_start_y"] = self.y()
+                    c["drop_target_y"] = self.get_floor_y()
+                    c["drop_frame"] = 0
+                    c["drop_total"] = 24
+                else:
+                    self.move(int(curr_x), int(c["target_crawl_y"]))
+
+            elif phase == "drop_down":
+                c["drop_frame"] += 1
+                prog = min(1.0, c["drop_frame"] / c["drop_total"])
+                curr_y = c["drop_start_y"] + (c["drop_target_y"] - c["drop_start_y"]) * (prog * prog)
+                self.move(int(self.x()), int(curr_y))
+                if prog >= 1.0:
+                    self._finish_roam_motion("land")
+                    QTimer.singleShot(350, lambda: self.animator.set_state("idle") if self.animator.current_state == "land" else None)
+                    self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
+
+        elif action_type == "climb_sequence":
+            phase = c["phase"]
+            if phase == "climbing_up":
+                curr_y = self.y() + c["speed_y"]
+                if curr_y <= c["target_y"]:
+                    self.move(int(c["edge_x"]), int(c["target_y"]))
+                    c["phase"] = "wall_clinging"
+                    self.animator.set_state("wall_idle")
+                    c["climb_until"] = time.monotonic() + random.uniform(3.0, 5.0)
+                else:
+                    self.move(int(c["edge_x"]), int(curr_y))
+
+            elif phase == "wall_clinging":
+                if time.monotonic() >= c["climb_until"]:
+                    c["phase"] = "climbing_down"
+                    self.animator.set_state("climb_down" if "climb_down" in self.animator.animations else "climb")
+
+            elif phase == "climbing_down":
+                curr_y = self.y() - c["speed_y"]
+                floor_y = self.get_floor_y()
+                if curr_y >= floor_y:
+                    self.move(int(c["edge_x"]), int(floor_y))
+                    self._finish_roam_motion("land")
+                    QTimer.singleShot(350, lambda: self.animator.set_state("idle") if self.animator.current_state == "land" else None)
+                    self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
+                else:
+                    self.move(int(c["edge_x"]), int(curr_y))
 
         elif action_type == "swing":
             c["frame"] += 1
@@ -1344,6 +1782,11 @@ class SpiderWindow(QWidget):
         self._choreo_timer.stop()
         self._roam_eval_timer.stop()
         self._roam_motion_timer.stop()
+        if hasattr(self, "_typing_idle_timer"):
+            self._typing_idle_timer.stop()
+        if self._current_worker and self._current_worker.isRunning():
+            self._current_worker.terminate()
+            self._current_worker.wait(200)
         if self._commands_dialog:
             self._commands_dialog.close()
         self.web_overlay.close()
@@ -1438,12 +1881,48 @@ class SpiderWindow(QWidget):
                 QTimer.singleShot(480, lambda: self.animator.set_state("work") if self.animator.current_state in ("web_shoot", "web_hang") else None)
                 self.bubble.action_notice(f"🕸️ ¡Lanzando telaraña para abrir {app_target} en ventana!...", user_prompt=user_text)
 
-            elif fn_name in ("browser_search", "web_search", "open_website"):
+            elif fn_name in ("browser_search", "web_search"):
                 q_target = args.get("query") or args.get("q") or "la red"
+                b_target = (args.get("browser") or "el navegador").capitalize()
+                self.animator.set_state("search")
+                QTimer.singleShot(900, lambda: self.animator.set_state("work") if self.animator.current_state == "search" else None)
+                self.bubble.action_notice(f"🔍 ¡Entrando a {b_target} para buscar '{q_target}'!...", user_prompt=user_text)
+
+            elif fn_name in ("open_website",):
+                q_target = args.get("query") or args.get("q") or "la web"
                 b_target = (args.get("browser") or "el navegador").capitalize()
                 self.animator.set_state("web_shoot")
                 QTimer.singleShot(480, lambda: self.animator.set_state("work") if self.animator.current_state in ("web_shoot", "web_hang") else None)
-                self.bubble.action_notice(f"🕸️ ¡Entrando a {b_target} para buscar '{q_target}'!...", user_prompt=user_text)
+                self.bubble.action_notice(f"🕸️ ¡Entrando a {b_target} en ventana!...", user_prompt=user_text)
+
+            elif fn_name in ("open_folder", "abrir_carpeta"):
+                f_target = (args.get("target") or "el Explorador").capitalize()
+                self.animator.set_state("web_shoot")
+                QTimer.singleShot(480, lambda: self.animator.set_state("work") if self.animator.current_state in ("web_shoot", "web_hang") else None)
+                self.bubble.action_notice(f"📂 ¡Abriendo la carpeta {f_target} en el Explorador!...", user_prompt=user_text)
+
+            elif fn_name in ("list_folder", "listar_carpeta"):
+                f_target = (args.get("target") or "la carpeta").capitalize()
+                self.animator.set_state("read")
+                self.bubble.action_notice(f"🔍 ¡Inspeccionando los archivos de {f_target}!...", user_prompt=user_text)
+
+            elif fn_name in ("find_files", "buscar_archivos"):
+                q_file = args.get("query") or "archivo"
+                self.animator.set_state("search")
+                QTimer.singleShot(900, lambda: self.animator.set_state("work") if self.animator.current_state == "search" else None)
+                self.bubble.action_notice(f"🕸️ ¡Rastreando '{q_file}' en tus carpetas y discos!...", user_prompt=user_text)
+
+            elif fn_name in ("care_advice", "consejo", "sentido_aracnido"):
+                self.animator.set_state("point")
+                self.bubble.action_notice("🕷️ ¡Calibrando sentido arácnido y revisando el estado del equipo!...", user_prompt=user_text)
+
+            elif fn_name in ("manage_files", "read_file", "summarize"):
+                self.animator.set_state("read")
+                self.bubble.action_notice("📖 ¡Inspeccionando y leyendo archivos del sistema!...", user_prompt=user_text)
+
+            elif fn_name in ("look_at_screen", "take_screenshot"):
+                self.animator.set_state("peek")
+                self.bubble.action_notice("👀 ¡Echando un vistazo arácnido a tu pantalla!...", user_prompt=user_text)
 
             elif fn_name in ("run_custom_command", "execute_custom_command"):
                 cmd_name = args.get("name") or "comanda"
@@ -1462,9 +1941,37 @@ class SpiderWindow(QWidget):
                 self.animator.set_state("work")
                 self.bubble.action_notice("🕸️ ¡Marchando orden en el sistema!...", user_prompt=user_text)
         else:
-            # General conversation: show thinking state in speech bubble and think animation
+            # General conversation: expressively react with Spidey personality animations
+            lowered = user_text.lower().strip()
+            if any(w in lowered for w in ("hola", "buenas", "hey", "saludos", "buenos días", "buenas tardes")):
+                self.animator.set_state("wave")
+                QTimer.singleShot(650, lambda: self.animator.set_state("think") if self.animator.current_state == "wave" else None)
+            elif any(w in lowered for w in ("!", "wow", "increible", "increíble", "socorro", "cuidado", "alerta", "ojo", "sentido arácnido", "spidey sense")):
+                self.animator.set_state("surprise")
+                QTimer.singleShot(600, lambda: self.animator.set_state("think") if self.animator.current_state == "surprise" else None)
+            elif any(w in lowered for w in ("busca", "encuentra", "dónde", "donde", "investiga", "averigua", "google")):
+                self.animator.set_state("search")
+                QTimer.singleShot(900, lambda: self.animator.set_state("think") if self.animator.current_state == "search" else None)
+            elif any(w in lowered for w in ("ecuación", "ecuacion", "fórmula", "formula", "física", "fisica", "química", "quimica", "apuntes", "lee", "leer", "libro", "peter parker", "estudio")):
+                self.animator.set_state("read")
+                QTimer.singleShot(900, lambda: self.animator.set_state("think") if self.animator.current_state == "read" else None)
+            elif any(w in lowered for w in ("a dormir", "buenas noches", "descansa", "siesta", "dormir")):
+                self.animator.set_state("sleep")
+            elif any(w in lowered for w in ("despierta", "arriba", "despiértate", "vamos")):
+                self.animator.set_state("wake")
+                QTimer.singleShot(450, lambda: self.animator.set_state("wave"))
+            elif any(w in lowered for w in ("gracias", "genial", "crack", "buen trabajo", "excelente", "bien hecho", "perfecto")):
+                self.animator.set_state("success")
+                QTimer.singleShot(750, lambda: self.animator.set_state("think") if self.animator.current_state == "success" else None)
+            else:
+                self.animator.set_state("think")
+
             self.bubble.think(user_prompt=user_text)
-            self.animator.set_state("think")
+
+        # Safely terminate any prior worker before launching new inference
+        if self._current_worker and self._current_worker.isRunning():
+            self._current_worker.terminate()
+            self._current_worker.wait(100)
 
         # Launch inference in background thread
         self._current_worker = BrainWorker(self.brain, user_text)
@@ -1475,7 +1982,15 @@ class SpiderWindow(QWidget):
     def _on_brain_reply(self, reply: str, user_text: str) -> None:
         """Receives completed reply from worker thread and streams via SpiderBubble."""
         print(f"Spidey: {reply}\n")
-        self.animator.set_state("talk")
+        lowered = user_text.lower()
+        from brain import _detect_action_intent
+        action_intent = _detect_action_intent(user_text)
+        is_praise = any(w in lowered for w in ("gracias", "genial", "crack", "bien hecho", "perfecto", "buena", "excelente"))
+        if (action_intent or is_praise) and "error" not in reply.lower():
+            self.animator.set_state("success")
+            QTimer.singleShot(700, lambda: self.animator.set_state("talk") if self.animator.current_state == "success" else None)
+        else:
+            self.animator.set_state("talk")
         self.bubble.say(reply, user_prompt=user_text)
 
     def _on_brain_error(self, err_msg: str) -> None:
