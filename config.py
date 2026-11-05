@@ -37,13 +37,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "keep_alive": "5m",     # Keeps model warm for 5 minutes, eliminating reload latency
         "num_ctx": 2048,        # Restricts context to avoid OOM
         "temperature": 0.7,
-        "max_tokens": 90,       # Capped to 1-3 sentences for fast response generation
+        "max_tokens": 160,      # Capped to 1-3 sentences for fast response generation
     },
     
     # UI / PySide6 Window Configuration
     "desk": {
         "size": 180,                 # Sprite height in pixels
-        "roam_seconds": [18, 40],    # Range of seconds before moving across the screen
+        "roam_seconds": [45, 95],    # Range of seconds before moving across the screen
         "fps": 30,                   # Animation frame rate
         "always_on_top": True,
         "sound_enabled": True,

@@ -45,7 +45,8 @@ from abilities.window_manager import (
     move_window,
     minimize_window,
 )
-from brain import SpiderBrain, CapriBrain, set_window_action_callback
+from abilities.media_sensor import get_now_playing
+from brain import SpiderBrain, CapriBrain, set_window_action_callback, set_window_perch_callback
 from bubble import SpiderBubble, CapriBubble
 
 
@@ -340,14 +341,21 @@ class SpiderWindow(QWidget):
         self.anim_timer.timeout.connect(self._on_anim_tick)
         self.anim_timer.start(16)
 
-        # Autonomous Roaming & Desktop Life Engine
+        # Autonomous Roaming & Desktop Life Engine (Calm Pacing)
         self.roaming_enabled: bool = True
         self.facing_left: bool = False
         self.last_user_touch: float = time.monotonic()
-        self.next_roam_time: float = time.monotonic() + random.uniform(5.0, 10.0)
+        self.next_roam_time: float = time.monotonic() + random.uniform(35.0, 75.0)
         self.is_roaming_moving: bool = False
         self._current_roam_action: dict | None = None
         self._perch_info: dict | None = None
+
+        # Spontaneous Live Chatter & Ambient Thought Engine
+        self.last_spontaneous_speech: float = time.monotonic()
+        self.next_spontaneous_speech: float = time.monotonic() + random.uniform(90.0, 180.0)
+        self._chatter_timer = QTimer(self)
+        self._chatter_timer.timeout.connect(self._evaluate_spontaneous_chatter)
+        self._chatter_timer.start(5000)
 
         # Roaming evaluation & motion timers
         self._roam_eval_timer = QTimer(self)
@@ -368,10 +376,13 @@ class SpiderWindow(QWidget):
         # Initial positioning of speech bubble
         self.bubble.reposition()
 
-        # Wire window choreography signal from brain.py to GUI thread
+        # Wire window choreography and perching signals from brain.py to GUI thread
         self.choreography_requested.connect(self._start_choreography)
         set_window_action_callback(
             lambda wid, act, sc, tc: self.choreography_requested.emit(wid, act, sc, tc)
+        )
+        set_window_perch_callback(
+            lambda wid, coords: self.perch_on_window(wid, coords)
         )
 
     def _setup_window_flags(self) -> None:
@@ -646,7 +657,7 @@ class SpiderWindow(QWidget):
                 self.animator.set_state("idle")
             self.update()
             self.last_user_touch = time.monotonic()
-            self.next_roam_time = time.monotonic() + random.uniform(10.0, 20.0)
+            self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
             event.accept()
         else:
             super().mouseReleaseEvent(event)
@@ -692,6 +703,9 @@ class SpiderWindow(QWidget):
         roam_act.setCheckable(True)
         roam_act.setChecked(self.roaming_enabled)
         roam_act.toggled.connect(self._toggle_roaming)
+
+        perch_act = menu.addAction("🧗 Posarse en ventana activa (Perch)")
+        perch_act.triggered.connect(lambda: self.perch_on_window())
 
         swing_act = menu.addAction("🕸️ Lanzar telaraña y balancearse")
         swing_act.triggered.connect(lambda: self._start_auto_swing())
@@ -741,12 +755,37 @@ class SpiderWindow(QWidget):
             self.web_sag = 0.0
             self.web_overlay.hide()
         self.last_user_touch = time.monotonic()
-        self.next_roam_time = time.monotonic() + random.uniform(15.0, 30.0)
+        self.next_roam_time = time.monotonic() + random.uniform(40.0, 80.0)
+
+    def _evaluate_spontaneous_chatter(self) -> None:
+        """Periodically triggers organic in-character thoughts, science facts, and PC observations."""
+        now = time.monotonic()
+        if now < self.next_spontaneous_speech:
+            return
+
+        # Do not interrupt active interactions
+        if (
+            self.bubble.isVisible()
+            or self._current_worker is not None
+            or self._drag_pos is not None
+            or self._choreo_timer.isActive()
+        ):
+            self.next_spontaneous_speech = now + random.uniform(30.0, 60.0)
+            return
+
+        from abilities.spontaneous_talk import get_spontaneous_chatter
+        line = get_spontaneous_chatter()
+        if line:
+            self.animator.set_state("talk" if "talk" in self.animator.animations else "idle")
+            self.bubble.say(line, "")
+            self.last_spontaneous_speech = now
+            # Next chatter scheduled between 3.5 and 6.5 minutes
+            self.next_spontaneous_speech = now + random.uniform(210.0, 390.0)
 
     def _evaluate_autonomous_roam(self) -> None:
         """
         Main heartbeat of Spider-Man's autonomous life.
-        Decides roaming movements, perching, upside-down web hangs, rests, and gestures.
+        Paced calmly so he rests, perches, or observes without frantic side-to-side pacing.
         """
         now = time.monotonic()
 
@@ -772,31 +811,28 @@ class SpiderWindow(QWidget):
             self._start_auto_descend_to_floor()
             return
 
-        bored = (now - self.last_user_touch > 120.0)
+        # Natural, peaceful behavior distribution: mostly sits, perches, or gestures at current spot
         roll = random.random()
 
-        if bored and roll < 0.35:
-            # Tired/bored: sit down or take a nap
-            self._start_auto_rest(is_nap=True)
-        elif roll < 0.35:
-            # Walk or run across screen
-            self._start_auto_walk()
-        elif roll < 0.60:
-            # Web swing in a pendular arc
-            self._start_auto_swing()
-        elif roll < 0.75:
-            # Hang upside-down on a web
-            self._start_auto_hang()
-        elif roll < 0.90:
+        if roll < 0.35:
+            # Sit down or take a restful nap (calm idle state)
+            self._start_auto_rest(is_nap=(roll < 0.15))
+        elif roll < 0.65:
             # Perch on an open window frame
             if not self._start_auto_perch():
-                self._start_auto_walk()
-        else:
-            # Play a personality gesture
+                self._start_auto_gesture()
+        elif roll < 0.82:
+            # Play a short friendly gesture at current spot without walking
             self._start_auto_gesture()
+        elif roll < 0.92:
+            # Web hang upside down
+            self._start_auto_hang()
+        else:
+            # Only rarely walk or run across the floor
+            self._start_auto_walk()
 
     def _update_perch_follow(self) -> None:
-        """Tracks the perched window's position across the desktop."""
+        """Tracks the perched window's position across the desktop in real time."""
         if not self._perch_info:
             return
         now = time.monotonic()
@@ -804,8 +840,17 @@ class SpiderWindow(QWidget):
             self._start_auto_descend_to_floor()
             return
 
-        target = get_active_or_target_window("")
-        if not target or target[0] != self._perch_info["wid"]:
+        wid = self._perch_info["wid"]
+        target = None
+        if sys.platform == "win32":
+            from abilities.window_manager import _get_window_bounds_win32
+            b = _get_window_bounds_win32(wid)
+            if b:
+                target = (wid, b)
+        if not target:
+            target = get_active_or_target_window("")
+
+        if not target or target[0] != wid:
             # Focus moved or window closed -> hop down to floor
             self._start_auto_descend_to_floor()
             return
@@ -814,7 +859,7 @@ class SpiderWindow(QWidget):
         new_x = wx + self._perch_info["rel_x"]
         new_y = wy + self._perch_info["rel_y"]
 
-        if abs(self.x() - new_x) > 3 or abs(self.y() - new_y) > 3:
+        if abs(self.x() - new_x) > 2 or abs(self.y() - new_y) > 2:
             self.move(int(new_x), int(new_y))
             self.bubble.reposition()
 
@@ -830,7 +875,7 @@ class SpiderWindow(QWidget):
 
         dist = target_x - current_x
         if abs(dist) < 50:
-            self.next_roam_time = time.monotonic() + random.uniform(3.0, 6.0)
+            self.next_roam_time = time.monotonic() + random.uniform(35.0, 70.0)
             return
 
         is_running = abs(dist) > 300
@@ -927,31 +972,46 @@ class SpiderWindow(QWidget):
         }
         self._roam_motion_timer.start(16)
 
-    def _start_auto_perch(self) -> bool:
-        """Finds an open active window and swings over to perch on its top ledge."""
+    def perch_on_window(self, wid: int = 0, coords: Optional[tuple] = None) -> bool:
+        """
+        Actively targets a specific or topmost desktop window and performs a
+        realistic swing/leap to sit on its upper ledge.
+        """
         try:
-            target = get_active_or_target_window("")
-            if not target:
-                return False
-            wid, (wx, wy, ww, wh) = target
+            self._cancel_roam()
+            self._perch_info = None
 
-            if ww < 250 or wh < 200 or wy < -50:
+            if not coords or not wid:
+                from abilities.window_manager import get_topmost_app_window
+                top = get_topmost_app_window(exclude_hwnds={int(self.winId())})
+                if not top:
+                    return False
+                wid, title, (wx, wy, ww, wh) = top
+            else:
+                wx, wy, ww, wh = coords
+
+            if ww < 220 or wh < 180 or wy < -50:
                 return False
 
             screen_x, screen_y, screen_w, screen_h = self.get_screen_bounds()
             perch_x = wx + random.randint(40, max(50, ww - self.SPRITE_WIDTH - 40))
-            perch_y = max(screen_y, wy - self.SPRITE_HEIGHT + 10)
+            perch_y = max(screen_y, wy - self.SPRITE_HEIGHT + 14)
 
             self._perch_info = {
                 "wid": wid,
                 "rel_x": perch_x - wx,
                 "rel_y": perch_y - wy,
-                "perch_until": time.monotonic() + random.uniform(12.0, 22.0),
+                "perch_until": time.monotonic() + random.uniform(25.0, 45.0),
             }
             self._start_auto_swing(custom_target=(perch_x, perch_y))
             return True
-        except Exception:
+        except Exception as err:
+            print(f"[perch] Error: {err}")
             return False
+
+    def _start_auto_perch(self) -> bool:
+        """Autonomous roaming hook: finds topmost window and perches."""
+        return self.perch_on_window()
 
     def _start_auto_descend_to_floor(self) -> None:
         """Jumps down from perched window or elevated ledge to the screen floor."""
@@ -976,8 +1036,8 @@ class SpiderWindow(QWidget):
         """Sits down or takes a nap when bored or resting."""
         state = "sleep" if is_nap else "sit"
         self.animator.set_state(state)
-        rest_duration = random.uniform(15.0, 30.0) if is_nap else random.uniform(6.0, 12.0)
-        self.next_roam_time = time.monotonic() + rest_duration
+        rest_duration = random.uniform(50.0, 110.0) if is_nap else random.uniform(30.0, 70.0)
+        self.next_roam_time = time.monotonic() + rest_duration + random.uniform(15.0, 30.0)
         QTimer.singleShot(int(rest_duration * 1000), self._wake_up_from_rest)
 
     def _wake_up_from_rest(self) -> None:
@@ -998,7 +1058,7 @@ class SpiderWindow(QWidget):
                 int(gesture_dur * 1000),
                 lambda: self.animator.set_state("idle") if self.animator.current_state == chosen else None
             )
-        self.next_roam_time = time.monotonic() + random.uniform(8.0, 16.0)
+        self.next_roam_time = time.monotonic() + random.uniform(40.0, 80.0)
 
     def _finish_roam_motion(self, final_state: str = "idle") -> None:
         """Concludes active roam motion and transitions animation state."""
@@ -1025,7 +1085,7 @@ class SpiderWindow(QWidget):
             if reached:
                 self.move(int(target_x), int(c["y"]))
                 self._finish_roam_motion("brake")
-                self.next_roam_time = time.monotonic() + random.uniform(8.0, 18.0)
+                self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
             else:
                 self.move(int(curr_x), int(c["y"]))
 
@@ -1046,7 +1106,7 @@ class SpiderWindow(QWidget):
                 self.web_active = False
                 self.web_overlay.hide()
                 self._finish_roam_motion(c.get("final_state", "idle"))
-                self.next_roam_time = time.monotonic() + random.uniform(10.0, 20.0)
+                self.next_roam_time = time.monotonic() + random.uniform(50.0, 95.0)
 
         elif action_type == "hang":
             phase = c["phase"]
@@ -1083,7 +1143,7 @@ class SpiderWindow(QWidget):
                 self.move(int(c["start_x"]), int(curr_y))
                 if prog >= 1.0:
                     self._finish_roam_motion("land")
-                    self.next_roam_time = time.monotonic() + random.uniform(8.0, 16.0)
+                    self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
 
         elif action_type == "drop_to_floor":
             c["frame"] += 1
@@ -1092,7 +1152,7 @@ class SpiderWindow(QWidget):
             self.move(int(c["start_x"]), int(curr_y))
             if prog >= 1.0:
                 self._finish_roam_motion("land")
-                self.next_roam_time = time.monotonic() + random.uniform(8.0, 16.0)
+                self.next_roam_time = time.monotonic() + random.uniform(45.0, 90.0)
 
     # --------------------------------------------------------------------------
     # PAINT EVENT: SPRITE & LOCAL WEB RENDERING
@@ -1167,19 +1227,60 @@ class SpiderWindow(QWidget):
         self.brain.save_memory()
         event.accept()
 
+    def _cancel_active_tasks(self) -> None:
+        """Instant Asides halt: aborts ongoing background worker, choreo, and roaming."""
+        aborted = False
+        if self._current_worker and self._current_worker.isRunning():
+            self._current_worker.terminate()
+            self._current_worker = None
+            aborted = True
+
+        if self._choreo_timer.isActive():
+            self._finish_choreography("idle")
+            aborted = True
+
+        if self.is_roaming_moving:
+            self._cancel_roam()
+            aborted = True
+
+        self.animator.set_state("brake" if "brake" in self.animator.animations else "idle")
+        if aborted:
+            self.bubble.say("¡Frenada en seco! Misión abortada a tu orden.", "")
+
+    def keyPressEvent(self, event) -> None:
+        """Global key event interceptor: Esc key aborts current tasks / inference."""
+        if event.key() == Qt.Key_Escape:
+            self._cancel_active_tasks()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
     # --------------------------------------------------------------------------
     # CHAT SUBMISSION & BRAIN INTERACTION
     # --------------------------------------------------------------------------
 
     def _handle_user_submit(self, user_text: str) -> None:
-        """Submits user text to SpiderBrain asynchronously."""
-        # Cancel any active autonomous roaming immediately
-        self._cancel_roam()
-        self._perch_info = None
-
+        """Submits user text to SpiderBrain asynchronously with Aside interruption support."""
         user_text = user_text.strip()
         if not user_text:
             return
+
+        # ASIDES INTERCEPTOR: Handle interruption / progress queries while brain is actively working
+        if self._current_worker and self._current_worker.isRunning():
+            clean_low = user_text.lower().strip(" .!?¿¡")
+            if clean_low in ("para", "stop", "cancela", "cancelar", "detente", "deténte", "cállate", "basta", "quiet"):
+                self._current_worker.terminate()
+                self._current_worker = None
+                self.animator.set_state("idle")
+                self.bubble.say("¡Cancelado de inmediato! A tus órdenes, socio.", "")
+                return
+            if clean_low in ("cómo vas", "¿cómo vas?", "que haces", "qué haces", "¿qué haces?", "progreso", "status"):
+                self.bubble.say("Sigo calculando las coordenadas y procesando la tarea, ¡dame un segundo!", "")
+                return
+
+        # Cancel any active autonomous roaming immediately
+        self._cancel_roam()
+        self._perch_info = None
 
         # Check for exit / termination keywords
         if user_text.lower() in ("exit", "quit", "q"):
