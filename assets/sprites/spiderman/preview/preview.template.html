@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ca">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Spider-Man · Laboratori de sprites</title>
+  <style>
+    :root { --bg:#0c1016; --panel:#141a23; --line:#27303e; --muted:#9ca9ba; --text:#f3f5f8; --red:#ff4b51; --blue:#51cbef; --radius:18px; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input { font:inherit; }
+    button { color:inherit; cursor:pointer; }
+    button:focus-visible,input:focus-visible,canvas:focus-visible { outline:3px solid var(--blue); outline-offset:4px; }
+    button:disabled { opacity:.45; cursor:default; }
+    .shell { width:min(1360px,calc(100% - 64px)); margin:0 auto; padding:34px 0 26px; }
+    .topline,.brand,.status,.controls,.control-group,.direction,.panel-title,.summary,.footer,.chips,.stage-label,.stage-info { display:flex; align-items:center; }
+    .topline { justify-content:space-between; gap:16px; }
+    .brand { gap:11px; font-weight:750; letter-spacing:.09em; font-size:11px; text-transform:uppercase; }
+    .brand-mark { width:26px; height:26px; background:var(--red); border-radius:8px; display:grid; place-items:center; color:#091019; font-size:17px; font-weight:900; }
+    .status { gap:7px; color:var(--muted); font-size:12px; }
+    .status i { width:7px; height:7px; border-radius:50%; background:#6fd9b2; box-shadow:0 0 0 4px #6fd9b20d; }
+    header { margin:34px 0 28px; display:flex; align-items:flex-end; justify-content:space-between; gap:24px; }
+    h1 { font-size:clamp(28px,3.2vw,43px); line-height:1.12; margin:0 0 12px; font-weight:750; letter-spacing:-.045em; }
+    .intro { color:var(--muted); margin:0; max-width:650px; font-size:14px; }
+    .chips { gap:8px; flex-wrap:wrap; justify-content:flex-end; padding-bottom:3px; }
+    .chip { border:1px solid var(--line); border-radius:30px; padding:6px 11px; font-size:11px; color:#cbd4e0; white-space:nowrap; }
+    .workspace { display:grid; grid-template-columns:minmax(0,1fr) 350px; gap:20px; align-items:start; }
+    .stage-panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+    .stage-top { padding:16px 20px; display:flex; justify-content:space-between; gap:10px; align-items:center; border-bottom:1px solid var(--line); }
+    .stage-label { gap:9px; font-size:12px; color:#d8e1ec; }
+    .live-dot { height:6px; width:6px; border-radius:50%; background:var(--red); }
+    .stage-info { gap:10px; color:var(--muted); font-size:11px; font-variant-numeric:tabular-nums; }
+    .stage-wrap { height:448px; position:relative; background:#101720; overflow:hidden; transition:background .2s; }
+    .stage-wrap.light { background:#dee5ed; }
+    #stage { display:block; width:100%; height:100%; image-rendering:pixelated; touch-action:none; cursor:crosshair; }
+    .stage-overlay { position:absolute; top:18px; left:20px; right:20px; display:flex; align-items:flex-start; justify-content:space-between; pointer-events:none; }
+    .current-label { padding:8px 12px; border-radius:9px; border:1px solid #ffffff12; background:#101720dc; backdrop-filter:blur(10px); color:#f5f7fa; }
+    .current-label strong { display:block; font-size:14px; font-weight:600; }
+    .current-label small { display:block; color:#9daabc; font-size:10px; margin-top:1px; letter-spacing:.04em; }
+    .stage-tools { display:flex; gap:6px; pointer-events:auto; }
+    .icon-button { border:1px solid #ffffff18; background:#101720dc; height:33px; min-width:33px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; padding:0 9px; color:#c9d2de; }
+    .icon-button:hover { border-color:#718399; color:#fff; }
+    .icon-button[aria-pressed="true"] { background:#2b3746; border-color:#7f98af; }
+    .icon-button svg { width:15px; height:15px; }
+    .floor-label { position:absolute; bottom:15px; left:20px; color:#7e8a9a; font-size:10px; pointer-events:none; }
+    .stage-wrap.light .floor-label { color:#4c5868; }
+    .hint { position:absolute; bottom:14px; right:20px; color:#99a7b9; font-size:10px; pointer-events:none; text-align:right; max-width:65%; }
+    .stage-wrap.light .hint { color:#4c5868; }
+    .controls { gap:21px; flex-wrap:wrap; padding:18px 20px; border-top:1px solid var(--line); }
+    .play-button { display:flex; align-items:center; justify-content:center; gap:8px; border:0; color:#fff; background:#e84349; padding:9px 13px; border-radius:9px; min-width:100px; font-size:12px; font-weight:650; }
+    .play-button:hover { background:#fd5359; }
+    .play-button svg { width:13px; height:13px; }
+    .control-group { gap:9px; }
+    .control-label { font-size:11px; color:var(--muted); }
+    .direction { background:#0c121b; padding:3px; border:1px solid var(--line); border-radius:8px; gap:2px; }
+    .direction button { border:0; background:none; border-radius:5px; padding:4px 8px; line-height:1.2; color:var(--muted); }
+    .direction button[aria-pressed="true"] { background:#2a3442; color:white; }
+    .value { font-size:11px; color:#dce4ee; font-variant-numeric:tabular-nums; min-width:29px; }
+    input[type="range"] { accent-color:var(--blue); width:76px; height:16px; margin:0; cursor:pointer; }
+    .toggles { display:flex; flex-wrap:wrap; gap:17px; padding:0 20px 17px; }
+    .toggle { color:var(--muted); font-size:11px; display:flex; align-items:center; gap:7px; cursor:pointer; }
+    .toggle input { accent-color:var(--red); margin:0; width:13px; height:13px; }
+    .legend { margin:15px 2px 0; display:flex; flex-wrap:wrap; gap:8px 17px; font-size:11px; color:#8290a2; }
+    .legend span { display:inline-flex; align-items:center; gap:6px; }
+    kbd { background:#181f2a; border:1px solid #303a48; border-radius:4px; min-width:21px; padding:1px 5px; color:#becbda; text-align:center; font:10px/1.4 ui-monospace,monospace; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+    .panel-title { justify-content:space-between; gap:12px; padding:18px 18px 13px; }
+    h2 { font-size:14px; font-weight:650; margin:0; }
+    .count { font-size:11px; padding:1px 7px; background:#273140; color:#aab8ca; border-radius:5px; }
+    .tabs { display:flex; gap:6px; overflow-x:auto; padding:0 18px 15px; scrollbar-width:thin; }
+    .tab { flex:0 0 auto; border:1px solid transparent; border-radius:7px; background:#1c2531; padding:6px 9px; font-size:10px; color:#a7b4c5; }
+    .tab:hover { color:#fff; }
+    .tab[aria-pressed="true"] { color:#ffd4d4; border-color:#fa515351; background:#fa515319; }
+    .animation-list { padding:0 12px 12px; max-height:480px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:#3a4656 transparent; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .animation-card { min-height:117px; border:1px solid #293342; background:#111822; border-radius:11px; text-align:left; position:relative; overflow:hidden; padding:6px 10px 8px; transition:border-color .15s,background .15s; }
+    .animation-card:hover { border-color:#627084; background:#1a2432; }
+    .animation-card[aria-pressed="true"] { border-color:var(--red); background:#ff4b510b; }
+    .animation-card canvas { width:100%; height:77px; display:block; image-rendering:pixelated; }
+    .animation-card .name { display:block; font-size:11px; font-weight:550; color:#dce4ed; }
+    .animation-card .meta { display:block; color:#76869a; font-size:9px; line-height:1.2; margin-top:2px; }
+    .active-dot { position:absolute; right:9px; top:10px; width:5px; height:5px; border-radius:50%; background:transparent; }
+    .animation-card[aria-pressed="true"] .active-dot { background:var(--red); }
+    .summary { justify-content:space-between; gap:12px; margin-top:24px; border-top:1px solid #202936; padding-top:18px; color:#7f8d9f; font-size:11px; }
+    .summary strong { color:#c3cfde; font-weight:550; }
+    .footer { margin-top:16px; justify-content:space-between; gap:12px; color:#617084; font-size:10px; }
+    .loading { position:absolute; inset:0; z-index:4; background:#101720ee; display:grid; place-content:center; text-align:center; gap:8px; color:#b7c4d4; font-size:13px; }
+    .loading[hidden] { display:none; }
+    .loading small { color:#6f8095; font-size:11px; }
+    .error { color:#ff8b90; white-space:pre-wrap; max-width:80%; margin:auto; }
+    .sr-only { position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0; }
+    @media (max-width:1100px) { .workspace { grid-template-columns:minmax(0,1fr) 305px;gap:16px; } .controls { gap:14px; } header { display:block; } .chips { justify-content:flex-start;margin-top:16px; } .stage-wrap { height:420px; } }
+    @media (max-width:800px) { .shell { width:calc(100% - 32px);padding-top:22px; } .workspace { grid-template-columns:1fr; } header { margin-top:27px; } .stage-wrap { height:380px; } .animation-list { grid-template-columns:repeat(4,1fr); max-height:312px; } .animation-card { min-height:110px; } .panel-title { padding-bottom:12px; } .summary { align-items:flex-start; } }
+    @media (max-width:480px) { .status { font-size:10px; } .brand { font-size:10px;letter-spacing:.05em; } .stage-wrap { height:330px; } .stage-top { padding:13px 14px; } .controls { padding:14px;gap:14px 18px; } .toggles { padding:0 14px 14px; } .stage-overlay { left:12px;right:12px; } .animation-list { grid-template-columns:repeat(3,1fr); } .animation-card { padding:4px 7px 8px; } .summary,.footer { display:block; } .summary > :last-child,.footer > :last-child { margin-top:5px; } .hint { font-size:9px;right:12px;max-width:68%; } .floor-label { left:12px; } }
+    @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important;transition:none!important; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topline">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✦</span> Spider-Man · Sprite lab</div>
+      <div class="status"><i aria-hidden="true"></i> Funciona sense connexió</div>
+    </div>
+    <header>
+      <div><h1>Un petit heroi al teu escriptori.</h1><p class="intro">Explora les animacions, prova els moviments i dona vida al teu company.</p></div>
+      <div class="chips"><span class="chip" id="chip-frames">PNG transparents</span><span class="chip">Pixel art</span><span class="chip">Preparat per integrar</span></div>
+    </header>
+    <div class="workspace">
+      <section aria-label="Previsualització de les animacions">
+        <div class="stage-panel">
+          <div class="stage-top"><div class="stage-label"><span class="live-dot" aria-hidden="true"></span> Escena de proves</div><div class="stage-info"><span id="frame-info">Fotograma 1 / 6</span><span id="fps-info">8 fps</span></div></div>
+          <div class="stage-wrap" id="stage-wrap">
+            <canvas id="stage" tabindex="0" aria-label="Escena interactiva. Fes clic per caminar, arrossega el personatge o prem espai per saltar."></canvas>
+            <div class="stage-overlay">
+              <div class="current-label"><strong id="current-label">Repòs</strong><small id="current-id">idle</small></div>
+              <div class="stage-tools">
+                <button type="button" class="icon-button" id="theme-button" aria-label="Canvia el fons clar o fosc" aria-pressed="false" title="Canvia el fons"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button>
+                <button type="button" class="icon-button" id="grid-button" aria-label="Mostra o amaga la quadrícula" aria-pressed="true" title="Quadrícula"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg></button>
+                <button type="button" class="icon-button" id="reset-button" aria-label="Reinicia la posició i l’animació" title="Reinicia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5 7a8 8 0 1 1-1 8M5 3v5h5"/></svg></button>
+              </div>
+            </div>
+            <span class="floor-label">ESCENA LOCAL</span><span class="hint">Clica per caminar · Arrossega per moure’l</span>
+            <div class="loading" id="loading"><span>Carregant els sprites…</span><small>Les imatges són dins d’aquest mateix fitxer.</small></div>
+          </div>
+          <div class="controls">
+            <button type="button" id="play-button" class="play-button" aria-pressed="true"><span id="play-icon" aria-hidden="true">Ⅱ</span><span id="play-label">Pausa</span></button>
+            <div class="control-group"><span class="control-label" id="direction-label">Sentit</span><div class="direction" role="group" aria-labelledby="direction-label"><button type="button" id="left-button" aria-label="Mira cap a l’esquerra" aria-pressed="false">←</button><button type="button" id="right-button" aria-label="Mira cap a la dreta" aria-pressed="true">→</button></div></div>
+            <div class="control-group"><label class="control-label" for="scale-input">Mida</label><input id="scale-input" type="range" min="1" max="3" step="0.5" value="2"><output class="value" id="scale-value" for="scale-input">2×</output></div>
+            <div class="control-group"><label class="control-label" for="speed-input">Ritme</label><input id="speed-input" type="range" min="0.5" max="2" step="0.25" value="1"><output class="value" id="speed-value" for="speed-input">1×</output></div>
+          </div>
+          <div class="toggles"><label class="toggle"><input type="checkbox" id="move-toggle" checked> Desplaçament</label><label class="toggle"><input type="checkbox" id="repeat-toggle" checked> Repetir l’animació</label><label class="toggle"><input type="checkbox" id="tour-toggle"> Veure totes les animacions</label></div>
+        </div>
+        <div class="legend"><span><kbd>←</kbd><kbd>→</kbd> Canviar sentit</span><span><kbd>Espai</kbd> Saltar</span><span><kbd>P</kbd> Pausar</span><span><kbd>R</kbd> Reiniciar</span></div>
+      </section>
+      <aside class="panel" aria-labelledby="animations-heading">
+        <div class="panel-title"><h2 id="animations-heading">Animacions</h2><span class="count" id="animation-count">—</span></div>
+        <div class="tabs" id="tabs" role="group" aria-label="Filtra per tipus d’animació"></div>
+        <div class="animation-list" id="animation-list"></div>
+      </aside>
+    </div>
+    <div class="summary"><div><strong id="summary-count">Pack de sprites</strong> <span id="summary-format"></span></div><div>Mirall esquerra / dreta · Fons transparent</div></div>
+    <footer class="footer"><span>Previsualització visual. Els estats d’IA s’activen des de la teva aplicació.</span><span>Cap connexió externa · Cap instal·lació</span></footer>
+    <p class="sr-only" id="announcement" aria-live="polite"></p>
+  </main>
+  <script>
+  /*__SPRITE_PLAYER_CODE__*/
+  </script>
+  <script>
+  'use strict';
+  const MANIFEST = /*__MANIFEST_JSON__*/;
+  const IMAGE_SOURCES = /*__IMAGE_SOURCES_JSON__*/;
+  (() => {
+    const $ = id => document.getElementById(id);
+    const canvas = $('stage');
+    const ctx = canvas.getContext('2d');
+    const stageWrap = $('stage-wrap');
+    const animationEntries = Object.entries(MANIFEST.animations);
+    const categoryNames = { movement:'Moviment', ground:'Moviment', locomotion:'Moviment', spider:'Teranyines', web:'Teranyines', webs:'Teranyines', ai:'Agent IA', agent:'Agent IA', gestures:'Gestos', personality:'Gestos', utility:'Accions', interaction:'Accions', utilitats:'Accions' };
+    const fallbackLabels = { idle:'Repòs',walk:'Caminar',run:'Córrer',jump:'Saltar',fall:'Caure',land:'Aterrar',climb:'Escalar',wall_idle:'A la paret',ceiling_crawl:'Pel sostre',web_shoot:'Llançar teranyina',web_hang:'Penjat',web_swing:'Balancejar-se',listen:'Escoltar',think:'Pensar',work:'Treballar',talk:'Respondre',success:'Fet!',error:'Error',wave:'Saludar',sit:'Asseure’s',sleep:'Dormir',wake:'Despertar',drag:'Arrossegat',peek:'Treure el cap',brake:'Frenar',read:'Llegir',search:'Buscar',point:'Assenyalar',surprise:'Sorpresa',released:'Deixar anar' };
+    const labelFor = (id, a) => a.label || a.labelCa || fallbackLabels[id] || id.replaceAll('_',' ');
+    const categoryFor = a => a.category || 'other';
+    const durationFor = a => a.frames.reduce((sum,f,i)=>sum+(f.durationMs ?? a.frameDurationsMs?.[i] ?? 1000/(a.fps||8)),0);
+    const timingFor = a => a.frames.some(f=>f.durationMs!==undefined)||a.frameDurationsMs ? (durationFor(a)/1000).toLocaleString('ca',{maximumFractionDigits:2})+' s/cicle' : (a.fps||8)+' fps';
+    const frameWidth = MANIFEST.frameSize?.width || 128;
+    const frameHeight = MANIFEST.frameSize?.height || 128;
+    const state = { w:800,h:448,dpr:1,x:400,y:350,scale:2,speed:1,playing:!matchMedia('(prefers-reduced-motion: reduce)').matches,light:false,grid:true,move:true,repeat:true,flipX:false,dragging:false,destination:null,marker:null,filter:'all',cards:[],tour:false,tourIndex:0,tourElapsed:0,elapsed:0,lastTime:null };
+    const player = new SpiderSpritePlayer(MANIFEST,{imageSources:IMAGE_SOURCES,animation:MANIFEST.animations.idle?'idle':animationEntries[0][0]});
+    window.spritePreview = { player, manifest:MANIFEST, state, selectAnimation, render, setDirection, resize };
+
+    function setDirection(left) {
+      state.flipX = Boolean(left);
+      player.setDirection(state.flipX ? 'left' : 'right');
+      $('left-button').setAttribute('aria-pressed',String(state.flipX));
+      $('right-button').setAttribute('aria-pressed',String(!state.flipX));
+    }
+
+    function setPlaying(playing) {
+      state.playing = playing;
+      $('play-button').setAttribute('aria-pressed',String(playing));
+      $('play-label').textContent = playing ? 'Pausa' : 'Reprodueix';
+      $('play-icon').textContent = playing ? 'Ⅱ' : '▶';
+    }
+
+    function selectAnimation(id, options = {}) {
+      if (!MANIFEST.animations[id] && !MANIFEST.aliases?.[id]) return;
+      player.setAnimation(id,{flipX:state.flipX,loop:options.oneShot ? false : state.repeat ? true : null});
+      if (!options.keepDestination) state.destination = null;
+      if (!options.keepTour && state.tour) { state.tour=false; $('tour-toggle').checked=false; }
+      const animation = player.animation;
+      $('current-label').textContent = labelFor(player.animationId,animation);
+      $('current-id').textContent = id;
+      $('fps-info').textContent = timingFor(animation);
+      for (const card of state.cards) card.button.setAttribute('aria-pressed',String(card.id===player.animationId));
+      $('announcement').textContent = 'Animació: ' + labelFor(player.animationId,animation);
+      updatePositionForAnimation();
+      if (options.play !== false) setPlaying(true);
+      render();
+    }
+
+    function updatePositionForAnimation() {
+      if (state.dragging) return;
+      const id=player.animationId;
+      if (id==='ceiling_crawl') state.y=76;
+      else if (id==='web_hang' || id==='web_swing') state.y=Math.max(62,state.h*.28-state.scale*4);
+      else if (id==='climb' || id==='wall_idle') { state.x=state.flipX?22:state.w-22;state.y=state.h*.57; }
+      else state.y=state.h-55;
+    }
+
+    function resize() {
+      const rect=stageWrap.getBoundingClientRect();
+      const priorWidth=state.w;
+      state.w=rect.width;state.h=rect.height;state.dpr=Math.min(devicePixelRatio || 1,2);
+      const maxScale=state.h<380?2:3;
+      $('scale-input').max=String(maxScale);
+      if(state.scale>maxScale){state.scale=maxScale;$('scale-input').value=String(maxScale);$('scale-value').textContent=maxScale+'×';}
+      canvas.width=Math.round(state.w*state.dpr);canvas.height=Math.round(state.h*state.dpr);
+      state.x=priorWidth ? state.x/priorWidth*state.w : state.w/2;
+      state.x=Math.min(Math.max(state.x,50),state.w-50);
+      updatePositionForAnimation();
+      render();
+    }
+
+    function buildFilters() {
+      const categories=[...new Set(animationEntries.map(([,a])=>categoryFor(a)))];
+      const tabs=[['all','Totes'],...categories.map(category=>[category,categoryNames[category] || category])];
+      tabs.forEach(([id,label])=>{
+        const button=document.createElement('button');button.type='button';button.className='tab';button.textContent=label;button.dataset.category=id;button.setAttribute('aria-pressed',String(id==='all'));
+        button.addEventListener('click',()=>{state.filter=id;for(const tab of $('tabs').children)tab.setAttribute('aria-pressed',String(tab===button));for(const card of state.cards)card.button.hidden=id!=='all'&&categoryFor(card.animation)!==id;});
+        $('tabs').append(button);
+      });
+    }
+
+    function buildCards() {
+      animationEntries.forEach(([id,animation])=>{
+        const button=document.createElement('button');button.type='button';button.className='animation-card';button.setAttribute('aria-pressed',String(id===player.animationId));button.setAttribute('aria-label',labelFor(id,animation));
+        const thumbnail=document.createElement('canvas');thumbnail.width=144;thumbnail.height=96;thumbnail.setAttribute('aria-hidden','true');
+        const name=document.createElement('span');name.className='name';name.textContent=labelFor(id,animation);
+        const meta=document.createElement('span');meta.className='meta';meta.textContent=(animation.frames?.length || animation.frameCount || 6)+' fotogrames · '+timingFor(animation);
+        const dot=document.createElement('span');dot.className='active-dot';dot.setAttribute('aria-hidden','true');
+        button.append(thumbnail,name,meta,dot);button.addEventListener('click',()=>selectAnimation(id));
+        const card={id,animation,button,canvas:thumbnail,ctx:thumbnail.getContext('2d'),hover:false};button.addEventListener('mouseenter',()=>card.hover=true);button.addEventListener('mouseleave',()=>card.hover=false);
+        state.cards.push(card);$('animation-list').append(button);
+      });
+      $('animation-count').textContent=String(animationEntries.length);
+      const frameCount=animationEntries.reduce((sum,[,a])=>sum+a.frames.length,0);
+      $('chip-frames').textContent=frameCount+' fotogrames transparents';
+      $('summary-count').textContent=animationEntries.length+' animacions · '+frameCount+' fotogrames';
+      $('summary-format').textContent=' / PNG · '+frameWidth+' × '+frameHeight+' px';
+    }
+
+    function renderCards() {
+      for(const card of state.cards) {
+        if(card.button.hidden)continue;
+        let frameIndex=0;
+        if(card.id===player.animationId)frameIndex=player.current.index;
+        else if(card.hover&&state.playing) {
+          let time=(state.elapsed*1000*state.speed)%durationFor(card.animation);
+          for(let i=0;i<card.animation.frames.length;i++) {
+            const frameTime=card.animation.frames[i].durationMs ?? card.animation.frameDurationsMs?.[i] ?? 1000/(card.animation.fps||8);
+            if(time<frameTime){frameIndex=i;break;}time-=frameTime;
+          }
+        }
+        if(card.lastFrame===frameIndex)continue;
+        card.lastFrame=frameIndex;
+        const f=card.animation.frames[frameIndex];const image=player.images[f.sheet||card.animation.sheet];if(!image)continue;
+        card.ctx.clearRect(0,0,144,96);card.ctx.imageSmoothingEnabled=false;
+        const w=f.w||frameWidth,h=f.h||frameHeight,s=Math.min(132/w,90/h);
+        card.ctx.drawImage(image,f.x,f.y,w,h,Math.round((144-w*s)/2),Math.round((96-h*s)/2),Math.round(w*s),Math.round(h*s));
+      }
+    }
+
+    function render() {
+      ctx.setTransform(state.dpr,0,0,state.dpr,0,0);ctx.clearRect(0,0,state.w,state.h);
+      if(state.grid) {
+        ctx.strokeStyle=state.light?'#bbc8d250':'#8ea3bc0c';ctx.lineWidth=1;ctx.beginPath();
+        for(let x=0;x<state.w;x+=32){ctx.moveTo(x+.5,0);ctx.lineTo(x+.5,state.h);}
+        for(let y=0;y<state.h;y+=32){ctx.moveTo(0,y+.5);ctx.lineTo(state.w,y+.5);}
+        ctx.stroke();
+      }
+      const floorY=state.h-55;
+      ctx.strokeStyle=state.light?'#8695a7':'#344253';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(20,floorY+.5);ctx.lineTo(state.w-20,floorY+.5);ctx.stroke();
+      ctx.fillStyle=state.light?'#768ba510':'#00000015';ctx.fillRect(0,floorY,state.w,55);
+      if(player.animationId==='climb'||player.animationId==='wall_idle') {ctx.strokeStyle=state.light?'#8695a7':'#344253';ctx.beginPath();const wallX=state.flipX?20:state.w-20;ctx.moveTo(wallX,74);ctx.lineTo(wallX,floorY);ctx.stroke();}
+      if(player.animationId==='ceiling_crawl') {ctx.strokeStyle=state.light?'#8695a7':'#344253';ctx.beginPath();ctx.moveTo(20,76);ctx.lineTo(state.w-20,76);ctx.stroke();}
+      if(state.marker && state.elapsed-state.marker.time<1) {
+        const age=state.elapsed-state.marker.time;ctx.strokeStyle=state.light?'#d33040':'#ff6269';ctx.globalAlpha=1-age;ctx.beginPath();ctx.arc(state.marker.x,floorY-3,5+age*12,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
+      }
+      const current=player.current;
+      const webOrigin=current.frame.webOrigin || player.animation.webOrigin;
+      if(webOrigin && (player.animationId==='web_hang'||player.animationId==='web_swing')) {
+        const p=player.localToWorld(webOrigin,state.x,state.y,state.scale);
+        ctx.strokeStyle=state.light?'#63788f':'#d7e8f4';ctx.lineWidth=Math.max(1,state.scale*.7);ctx.beginPath();ctx.moveTo(state.x,0);ctx.lineTo(p.x,p.y);ctx.stroke();
+      } else if(webOrigin && player.animationId==='web_shoot') {
+        const p=player.localToWorld(webOrigin,state.x,state.y,state.scale);
+        const reach=Math.min(state.w*.3,180)*state.scale/2;
+        ctx.strokeStyle=state.light?'#63788f':'#d7e8f4';ctx.lineWidth=Math.max(1,state.scale*.7);ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(Math.max(12,Math.min(state.w-12,p.x+reach*(state.flipX?-1:1))),Math.max(24,p.y-reach));ctx.stroke();
+      }
+      player.draw(ctx,state.x,state.y,{scale:state.scale});
+      $('frame-info').textContent='Fotograma '+(current.position+1)+' / '+player.animation.frames.length;
+      renderCards();
+    }
+
+    function reset() {
+      state.x=state.w/2;state.destination=null;state.marker=null;setDirection(false);selectAnimation(MANIFEST.animations.idle?'idle':animationEntries[0][0]);
+    }
+
+    function tick(time) {
+      const delta=state.lastTime===null?0:Math.min((time-state.lastTime)/1000,.08);state.lastTime=time;
+      if(state.playing) {
+        state.elapsed+=delta;
+        player.setSpeed(state.speed).update(delta);
+        if(state.tour) {
+          state.tourElapsed+=delta;
+          if(state.tourElapsed>2.5) {state.tourElapsed=0;state.tourIndex=(state.tourIndex+1)%animationEntries.length;selectAnimation(animationEntries[state.tourIndex][0],{keepTour:true});}
+        }
+        const id=player.animationId;
+        const moves=['walk','run','ceiling_crawl'];
+        if(state.move&&!state.dragging&&moves.includes(id)) {
+          const speed=(id==='run'?110:id==='ceiling_crawl'?28:52)*state.speed*(state.scale/2);
+          state.x+=delta*speed*(state.flipX?-1:1);
+          const margin=Math.min(state.w*.23,frameWidth*state.scale*.4);
+          if(state.destination!==null) {
+            if((!state.flipX&&state.x>=state.destination)||(state.flipX&&state.x<=state.destination)) {state.x=state.destination;state.destination=null;selectAnimation(MANIFEST.animations.brake?'brake':'idle',{keepTour:true,oneShot:true});}
+          } else if(state.x>state.w-margin) {state.x=state.w-margin;setDirection(true);} else if(state.x<margin) {state.x=margin;setDirection(false);}
+        }
+        if(player.finished&&!player.loop&&!state.dragging) {
+          const next=player.animation.next;
+          if(next&&(MANIFEST.animations[next]||MANIFEST.aliases?.[next]))selectAnimation(next,{keepTour:true});
+        }
+      }
+      render();requestAnimationFrame(tick);
+    }
+
+    function pointer(event) {const r=canvas.getBoundingClientRect();return {x:event.clientX-r.left,y:event.clientY-r.top};}
+    let dragOffset={x:0,y:0};let pointerStart=null;
+    canvas.addEventListener('pointerdown',event=>{
+      if(!Object.keys(player.images).length)return;
+      const p=pointer(event);pointerStart=p;
+      const f=player.current.frame,pivot=player.current.pivot;
+      const left=state.x-(state.flipX?(f.w||frameWidth)-pivot.x:pivot.x)*state.scale;
+      const top=state.y-pivot.y*state.scale;
+      if(p.x>=left&&p.x<=left+(f.w||frameWidth)*state.scale&&p.y>=top&&p.y<=top+(f.h||frameHeight)*state.scale) {
+        const centerX=state.x+((f.w||frameWidth)/2-pivot.x)*state.scale*(state.flipX?-1:1);
+        const centerY=state.y+((f.h||frameHeight)/2-pivot.y)*state.scale;
+        state.dragging=true;state.destination=null;canvas.setPointerCapture(event.pointerId);canvas.style.cursor='grabbing';
+        if(MANIFEST.animations.drag)selectAnimation('drag');
+        const newPivot=player.current.pivot;
+        state.x=centerX-(frameWidth/2-newPivot.x)*state.scale*(state.flipX?-1:1);
+        state.y=centerY-(frameHeight/2-newPivot.y)*state.scale;
+        dragOffset={x:state.x-p.x,y:state.y-p.y};render();
+      }
+      canvas.focus({preventScroll:true});
+    });
+    canvas.addEventListener('pointermove',event=>{if(state.dragging){const p=pointer(event);state.x=Math.min(state.w,Math.max(0,p.x+dragOffset.x));state.y=Math.min(state.h-55,Math.max(45,p.y+dragOffset.y));render();}});
+    function releasePointer(event) {
+      if(state.dragging) {
+        state.dragging=false;canvas.style.cursor='crosshair';if(canvas.hasPointerCapture(event.pointerId))canvas.releasePointerCapture(event.pointerId);
+        selectAnimation(MANIFEST.animations.land?'land':MANIFEST.animations.released?'released':'idle',{oneShot:true});
+      } else if(pointerStart&&event.type==='pointerup') {
+        const p=pointer(event);if(Math.hypot(p.x-pointerStart.x,p.y-pointerStart.y)<10) {
+          const margin=Math.min(state.w*.23,frameWidth*state.scale*.4);state.destination=Math.max(margin,Math.min(state.w-margin,p.x));state.marker={x:state.destination,time:state.elapsed};setDirection(state.destination<state.x);state.move=true;$('move-toggle').checked=true;selectAnimation(MANIFEST.animations.walk?'walk':'idle',{keepDestination:true});
+        }
+      }
+      pointerStart=null;
+    }
+    canvas.addEventListener('pointerup',releasePointer);canvas.addEventListener('pointercancel',releasePointer);
+    $('play-button').addEventListener('click',()=>setPlaying(!state.playing));
+    $('left-button').addEventListener('click',()=>{setDirection(true);state.destination=null;updatePositionForAnimation();render();});
+    $('right-button').addEventListener('click',()=>{setDirection(false);state.destination=null;updatePositionForAnimation();render();});
+    $('scale-input').addEventListener('input',event=>{state.scale=Number(event.target.value);$('scale-value').textContent=state.scale+'×';updatePositionForAnimation();render();});
+    $('speed-input').addEventListener('input',event=>{state.speed=Number(event.target.value);$('speed-value').textContent=state.speed+'×';});
+    $('move-toggle').addEventListener('change',event=>{state.move=event.target.checked;state.destination=null;});
+    $('repeat-toggle').addEventListener('change',event=>{state.repeat=event.target.checked;player.loopOverride=state.repeat?true:null;player.finished=false;});
+    $('tour-toggle').addEventListener('change',event=>{state.tour=event.target.checked;state.tourIndex=0;state.tourElapsed=0;if(state.tour)selectAnimation(animationEntries[0][0],{keepTour:true});});
+    $('theme-button').addEventListener('click',()=>{state.light=!state.light;stageWrap.classList.toggle('light',state.light);$('theme-button').setAttribute('aria-pressed',String(state.light));render();});
+    $('grid-button').addEventListener('click',()=>{state.grid=!state.grid;$('grid-button').setAttribute('aria-pressed',String(state.grid));render();});
+    $('reset-button').addEventListener('click',reset);
+    document.addEventListener('keydown',event=>{
+      if(/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName))return;
+      if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();setDirection(event.key==='ArrowLeft');selectAnimation(MANIFEST.animations.walk?'walk':'idle');}
+      else if(event.code==='Space'){event.preventDefault();selectAnimation(MANIFEST.animations.jump?'jump':'idle');}
+      else if(event.key.toLowerCase()==='p')setPlaying(!state.playing);
+      else if(event.key.toLowerCase()==='r')reset();
+    });
+    document.addEventListener('visibilitychange',()=>{state.lastTime=null;});
+    new ResizeObserver(resize).observe(stageWrap);
+    buildFilters();buildCards();setPlaying(state.playing);
+    player.load().then(()=>{
+      $('loading').hidden=true;for(const card of state.cards)card.lastFrame=-1;resize();selectAnimation(player.animationName,{play:state.playing});
+      if(new URLSearchParams(location.search).get('tour')==='1') {state.tour=true;$('tour-toggle').checked=true;setPlaying(true);}
+      window.spritePreview.ready=true;requestAnimationFrame(tick);
+    }).catch(error=>{$('loading').innerHTML='';const message=document.createElement('div');message.className='error';message.textContent='No s’han pogut carregar els sprites.\n'+error.message;$('loading').append(message);console.error(error);});
+  })();
+  </script>
+</body>
+</html>

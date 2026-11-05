@@ -1,0 +1,2355 @@
+{
+  "format": "desktop-sprite-pack",
+  "version": 1,
+  "character": "spiderman-pixel",
+  "language": "ca",
+  "frameSize": {
+    "width": 128,
+    "height": 128
+  },
+  "columns": 6,
+  "rows": 6,
+  "defaultFacing": "right",
+  "filter": "nearest",
+  "counts": {
+    "baseAnimations": 30,
+    "uniqueSourceFrames": 180,
+    "directionAliases": 67
+  },
+  "sheets": {
+    "ground": {
+      "file": "sheets/01-ground.png",
+      "label": "Moviment a terra",
+      "width": 768,
+      "height": 768,
+      "columns": 6,
+      "rows": 6,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "source": "source_atlases/01-ground.png"
+    },
+    "spider": {
+      "file": "sheets/02-spider.png",
+      "label": "Moviments de Spider-Man",
+      "width": 768,
+      "height": 768,
+      "columns": 6,
+      "rows": 6,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "source": "source_atlases/02-spider.png"
+    },
+    "agent": {
+      "file": "sheets/03-agent.png",
+      "label": "Estats de l’agent",
+      "width": 768,
+      "height": 768,
+      "columns": 6,
+      "rows": 6,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "source": "source_atlases/03-agent.png"
+    },
+    "personality": {
+      "file": "sheets/04-personality.png",
+      "label": "Interacció i descans",
+      "width": 768,
+      "height": 768,
+      "columns": 6,
+      "rows": 6,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "source": "source_atlases/04-personality.png"
+    },
+    "utility": {
+      "file": "sheets/05-utility.png",
+      "label": "Gestos i transicions",
+      "width": 768,
+      "height": 768,
+      "columns": 6,
+      "rows": 6,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "source": "source_atlases/05-utility.png"
+    }
+  },
+  "animations": {
+    "idle": {
+      "id": "idle",
+      "row": 0,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "ground",
+      "label": "En repòs",
+      "sheet": "ground",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/idle/00.png",
+          "durationMs": 650
+        },
+        {
+          "x": 128,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/idle/01.png",
+          "durationMs": 180
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/idle/02.png",
+          "durationMs": 180
+        },
+        {
+          "x": 384,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/idle/03.png",
+          "durationMs": 220
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/idle/04.png",
+          "durationMs": 1000
+        },
+        {
+          "x": 640,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/idle/05.png",
+          "durationMs": 100
+        }
+      ],
+      "strip": "animations/idle.png"
+    },
+    "walk": {
+      "id": "walk",
+      "row": 1,
+      "fps": 10,
+      "loop": true,
+      "next": null,
+      "motion": "ground",
+      "category": "ground",
+      "label": "Caminar",
+      "sheet": "ground",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/walk/00.png"
+        },
+        {
+          "x": 128,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/walk/01.png"
+        },
+        {
+          "x": 256,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/walk/02.png"
+        },
+        {
+          "x": 384,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/walk/03.png"
+        },
+        {
+          "x": 512,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/walk/04.png"
+        },
+        {
+          "x": 640,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/walk/05.png"
+        }
+      ],
+      "strip": "animations/walk.png"
+    },
+    "run": {
+      "id": "run",
+      "row": 2,
+      "fps": 14,
+      "loop": true,
+      "next": null,
+      "motion": "ground",
+      "category": "ground",
+      "label": "Córrer",
+      "sheet": "ground",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/run/00.png"
+        },
+        {
+          "x": 128,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/run/01.png"
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/run/02.png"
+        },
+        {
+          "x": 384,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/run/03.png"
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/run/04.png"
+        },
+        {
+          "x": 640,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/run/05.png"
+        }
+      ],
+      "strip": "animations/run.png"
+    },
+    "jump": {
+      "id": "jump",
+      "row": 3,
+      "fps": 12,
+      "loop": false,
+      "next": "fall",
+      "motion": "air",
+      "category": "ground",
+      "label": "Saltar",
+      "sheet": "ground",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/jump/00.png"
+        },
+        {
+          "x": 128,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/jump/01.png"
+        },
+        {
+          "x": 256,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/jump/02.png"
+        },
+        {
+          "x": 384,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/jump/03.png"
+        },
+        {
+          "x": 512,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/jump/04.png"
+        },
+        {
+          "x": 640,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/jump/05.png"
+        }
+      ],
+      "strip": "animations/jump.png"
+    },
+    "fall": {
+      "id": "fall",
+      "row": 4,
+      "fps": 10,
+      "loop": true,
+      "next": null,
+      "motion": "air",
+      "category": "ground",
+      "label": "Caure",
+      "sheet": "ground",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/fall/00.png"
+        },
+        {
+          "x": 128,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/fall/01.png"
+        },
+        {
+          "x": 256,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/fall/02.png"
+        },
+        {
+          "x": 384,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/fall/03.png"
+        },
+        {
+          "x": 512,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/fall/04.png"
+        },
+        {
+          "x": 640,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/fall/05.png"
+        }
+      ],
+      "strip": "animations/fall.png"
+    },
+    "land": {
+      "id": "land",
+      "row": 5,
+      "fps": 12,
+      "loop": false,
+      "next": "idle",
+      "motion": "ground",
+      "category": "ground",
+      "label": "Aterrar",
+      "sheet": "ground",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/land/00.png"
+        },
+        {
+          "x": 128,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/land/01.png"
+        },
+        {
+          "x": 256,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/land/02.png"
+        },
+        {
+          "x": 384,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/land/03.png"
+        },
+        {
+          "x": 512,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/land/04.png"
+        },
+        {
+          "x": 640,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/land/05.png"
+        }
+      ],
+      "strip": "animations/land.png"
+    },
+    "climb": {
+      "id": "climb",
+      "row": 0,
+      "fps": 10,
+      "loop": true,
+      "next": null,
+      "motion": "wall",
+      "category": "spider",
+      "label": "Escalar",
+      "sheet": "spider",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 112,
+        "y": 64
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/climb/00.png"
+        },
+        {
+          "x": 128,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/climb/01.png"
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/climb/02.png"
+        },
+        {
+          "x": 384,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/climb/03.png"
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/climb/04.png"
+        },
+        {
+          "x": 640,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/climb/05.png"
+        }
+      ],
+      "strip": "animations/climb.png"
+    },
+    "wall_idle": {
+      "id": "wall_idle",
+      "row": 1,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "wall",
+      "category": "spider",
+      "label": "Agafat a la paret",
+      "sheet": "spider",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 112,
+        "y": 64
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wall_idle/00.png"
+        },
+        {
+          "x": 128,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wall_idle/01.png"
+        },
+        {
+          "x": 256,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wall_idle/02.png"
+        },
+        {
+          "x": 384,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wall_idle/03.png"
+        },
+        {
+          "x": 512,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wall_idle/04.png"
+        },
+        {
+          "x": 640,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wall_idle/05.png"
+        }
+      ],
+      "strip": "animations/wall_idle.png"
+    },
+    "ceiling_crawl": {
+      "id": "ceiling_crawl",
+      "row": 2,
+      "fps": 10,
+      "loop": true,
+      "next": null,
+      "motion": "ceiling",
+      "category": "spider",
+      "label": "Avançar pel sostre",
+      "sheet": "spider",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 16
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/ceiling_crawl/00.png"
+        },
+        {
+          "x": 128,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/ceiling_crawl/01.png"
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/ceiling_crawl/02.png"
+        },
+        {
+          "x": 384,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/ceiling_crawl/03.png"
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/ceiling_crawl/04.png"
+        },
+        {
+          "x": 640,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/ceiling_crawl/05.png"
+        }
+      ],
+      "strip": "animations/ceiling_crawl.png"
+    },
+    "web_shoot": {
+      "id": "web_shoot",
+      "row": 3,
+      "fps": 12,
+      "loop": false,
+      "next": "web_hang",
+      "motion": "web",
+      "category": "spider",
+      "label": "Llançar teranyina",
+      "sheet": "spider",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_shoot/00.png"
+        },
+        {
+          "x": 128,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_shoot/01.png"
+        },
+        {
+          "x": 256,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_shoot/02.png",
+          "webOrigin": {
+            "x": 87,
+            "y": 78
+          }
+        },
+        {
+          "x": 384,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_shoot/03.png",
+          "webOrigin": {
+            "x": 83,
+            "y": 77
+          }
+        },
+        {
+          "x": 512,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_shoot/04.png",
+          "webOrigin": {
+            "x": 81,
+            "y": 83
+          }
+        },
+        {
+          "x": 640,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_shoot/05.png"
+        }
+      ],
+      "strip": "animations/web_shoot.png"
+    },
+    "web_hang": {
+      "id": "web_hang",
+      "row": 4,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "web",
+      "category": "spider",
+      "label": "Penjat cap per avall",
+      "sheet": "spider",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 16
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_hang/00.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 128,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_hang/01.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 256,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_hang/02.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 384,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_hang/03.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 512,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_hang/04.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 640,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_hang/05.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        }
+      ],
+      "strip": "animations/web_hang.png"
+    },
+    "web_swing": {
+      "id": "web_swing",
+      "row": 5,
+      "fps": 12,
+      "loop": true,
+      "next": null,
+      "motion": "web",
+      "category": "spider",
+      "label": "Balancejar-se amb teranyina",
+      "sheet": "spider",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 16
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_swing/00.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 128,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_swing/01.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 256,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_swing/02.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 384,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_swing/03.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 512,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_swing/04.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        },
+        {
+          "x": 640,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/web_swing/05.png",
+          "webOrigin": {
+            "x": 64,
+            "y": 16
+          },
+          "pivot": {
+            "x": 64,
+            "y": 16
+          }
+        }
+      ],
+      "strip": "animations/web_swing.png"
+    },
+    "listen": {
+      "id": "listen",
+      "row": 0,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "agent",
+      "label": "Escoltar",
+      "sheet": "agent",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/listen/00.png"
+        },
+        {
+          "x": 128,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/listen/01.png"
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/listen/02.png"
+        },
+        {
+          "x": 384,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/listen/03.png"
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/listen/04.png"
+        },
+        {
+          "x": 640,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/listen/05.png"
+        }
+      ],
+      "strip": "animations/listen.png"
+    },
+    "think": {
+      "id": "think",
+      "row": 1,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "agent",
+      "label": "Pensar",
+      "sheet": "agent",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/think/00.png"
+        },
+        {
+          "x": 128,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/think/01.png"
+        },
+        {
+          "x": 256,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/think/02.png"
+        },
+        {
+          "x": 384,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/think/03.png"
+        },
+        {
+          "x": 512,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/think/04.png"
+        },
+        {
+          "x": 640,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/think/05.png"
+        }
+      ],
+      "strip": "animations/think.png"
+    },
+    "work": {
+      "id": "work",
+      "row": 2,
+      "fps": 10,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "agent",
+      "label": "Treballar",
+      "sheet": "agent",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/work/00.png"
+        },
+        {
+          "x": 128,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/work/01.png"
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/work/02.png"
+        },
+        {
+          "x": 384,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/work/03.png"
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/work/04.png"
+        },
+        {
+          "x": 640,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/work/05.png"
+        }
+      ],
+      "strip": "animations/work.png"
+    },
+    "talk": {
+      "id": "talk",
+      "row": 3,
+      "fps": 8,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "agent",
+      "label": "Respondre",
+      "sheet": "agent",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/talk/00.png"
+        },
+        {
+          "x": 128,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/talk/01.png"
+        },
+        {
+          "x": 256,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/talk/02.png"
+        },
+        {
+          "x": 384,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/talk/03.png"
+        },
+        {
+          "x": 512,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/talk/04.png"
+        },
+        {
+          "x": 640,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/talk/05.png"
+        }
+      ],
+      "strip": "animations/talk.png"
+    },
+    "success": {
+      "id": "success",
+      "row": 4,
+      "fps": 12,
+      "loop": false,
+      "next": "idle",
+      "motion": "stationary",
+      "category": "agent",
+      "label": "Celebrar una tasca completada",
+      "sheet": "agent",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/success/00.png"
+        },
+        {
+          "x": 128,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/success/01.png"
+        },
+        {
+          "x": 256,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/success/02.png"
+        },
+        {
+          "x": 384,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/success/03.png"
+        },
+        {
+          "x": 512,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/success/04.png"
+        },
+        {
+          "x": 640,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/success/05.png"
+        }
+      ],
+      "strip": "animations/success.png"
+    },
+    "error": {
+      "id": "error",
+      "row": 5,
+      "fps": 10,
+      "loop": false,
+      "next": "idle",
+      "motion": "stationary",
+      "category": "agent",
+      "label": "Mostrar un error",
+      "sheet": "agent",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/error/00.png"
+        },
+        {
+          "x": 128,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/error/01.png"
+        },
+        {
+          "x": 256,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/error/02.png"
+        },
+        {
+          "x": 384,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/error/03.png"
+        },
+        {
+          "x": 512,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/error/04.png"
+        },
+        {
+          "x": 640,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/error/05.png"
+        }
+      ],
+      "strip": "animations/error.png"
+    },
+    "wave": {
+      "id": "wave",
+      "row": 0,
+      "fps": 10,
+      "loop": false,
+      "next": "idle",
+      "motion": "stationary",
+      "category": "personality",
+      "label": "Saludar",
+      "sheet": "personality",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wave/00.png"
+        },
+        {
+          "x": 128,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wave/01.png"
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wave/02.png"
+        },
+        {
+          "x": 384,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wave/03.png"
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wave/04.png"
+        },
+        {
+          "x": 640,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wave/05.png"
+        }
+      ],
+      "strip": "animations/wave.png"
+    },
+    "sit": {
+      "id": "sit",
+      "row": 1,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "personality",
+      "label": "Seure",
+      "sheet": "personality",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sit/00.png"
+        },
+        {
+          "x": 128,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sit/01.png"
+        },
+        {
+          "x": 256,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sit/02.png"
+        },
+        {
+          "x": 384,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sit/03.png"
+        },
+        {
+          "x": 512,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sit/04.png"
+        },
+        {
+          "x": 640,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sit/05.png"
+        }
+      ],
+      "strip": "animations/sit.png"
+    },
+    "sleep": {
+      "id": "sleep",
+      "row": 2,
+      "fps": 4,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "personality",
+      "label": "Dormir",
+      "sheet": "personality",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sleep/00.png",
+          "durationMs": 650
+        },
+        {
+          "x": 128,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sleep/01.png",
+          "durationMs": 350
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sleep/02.png",
+          "durationMs": 350
+        },
+        {
+          "x": 384,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sleep/03.png",
+          "durationMs": 650
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sleep/04.png",
+          "durationMs": 350
+        },
+        {
+          "x": 640,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/sleep/05.png",
+          "durationMs": 350
+        }
+      ],
+      "strip": "animations/sleep.png"
+    },
+    "wake": {
+      "id": "wake",
+      "row": 3,
+      "fps": 10,
+      "loop": false,
+      "next": "idle",
+      "motion": "stationary",
+      "category": "personality",
+      "label": "Despertar-se",
+      "sheet": "personality",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wake/00.png"
+        },
+        {
+          "x": 128,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wake/01.png"
+        },
+        {
+          "x": 256,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wake/02.png"
+        },
+        {
+          "x": 384,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wake/03.png"
+        },
+        {
+          "x": 512,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wake/04.png"
+        },
+        {
+          "x": 640,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/wake/05.png"
+        }
+      ],
+      "strip": "animations/wake.png"
+    },
+    "drag": {
+      "id": "drag",
+      "row": 4,
+      "fps": 10,
+      "loop": true,
+      "next": null,
+      "motion": "manual",
+      "category": "personality",
+      "label": "Deixar-se arrossegar",
+      "sheet": "personality",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 16
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/drag/00.png"
+        },
+        {
+          "x": 128,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/drag/01.png"
+        },
+        {
+          "x": 256,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/drag/02.png"
+        },
+        {
+          "x": 384,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/drag/03.png"
+        },
+        {
+          "x": 512,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/drag/04.png"
+        },
+        {
+          "x": 640,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/drag/05.png"
+        }
+      ],
+      "strip": "animations/drag.png"
+    },
+    "peek": {
+      "id": "peek",
+      "row": 5,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "edge",
+      "category": "personality",
+      "label": "Treure el cap",
+      "sheet": "personality",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/peek/00.png"
+        },
+        {
+          "x": 128,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/peek/01.png"
+        },
+        {
+          "x": 256,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/peek/02.png"
+        },
+        {
+          "x": 384,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/peek/03.png"
+        },
+        {
+          "x": 512,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/peek/04.png"
+        },
+        {
+          "x": 640,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/peek/05.png"
+        }
+      ],
+      "strip": "animations/peek.png"
+    },
+    "brake": {
+      "id": "brake",
+      "row": 0,
+      "fps": 12,
+      "loop": false,
+      "next": "idle",
+      "motion": "ground",
+      "category": "utility",
+      "label": "Frenar",
+      "sheet": "utility",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/brake/00.png"
+        },
+        {
+          "x": 128,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/brake/01.png"
+        },
+        {
+          "x": 256,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/brake/02.png"
+        },
+        {
+          "x": 384,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/brake/03.png"
+        },
+        {
+          "x": 512,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/brake/04.png"
+        },
+        {
+          "x": 640,
+          "y": 0,
+          "w": 128,
+          "h": 128,
+          "file": "frames/brake/05.png"
+        }
+      ],
+      "strip": "animations/brake.png"
+    },
+    "read": {
+      "id": "read",
+      "row": 1,
+      "fps": 6,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "utility",
+      "label": "Llegir",
+      "sheet": "utility",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/read/00.png"
+        },
+        {
+          "x": 128,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/read/01.png"
+        },
+        {
+          "x": 256,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/read/02.png"
+        },
+        {
+          "x": 384,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/read/03.png"
+        },
+        {
+          "x": 512,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/read/04.png"
+        },
+        {
+          "x": 640,
+          "y": 128,
+          "w": 128,
+          "h": 128,
+          "file": "frames/read/05.png"
+        }
+      ],
+      "strip": "animations/read.png"
+    },
+    "search": {
+      "id": "search",
+      "row": 2,
+      "fps": 8,
+      "loop": true,
+      "next": null,
+      "motion": "stationary",
+      "category": "utility",
+      "label": "Buscar",
+      "sheet": "utility",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/search/00.png"
+        },
+        {
+          "x": 128,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/search/01.png"
+        },
+        {
+          "x": 256,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/search/02.png"
+        },
+        {
+          "x": 384,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/search/03.png"
+        },
+        {
+          "x": 512,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/search/04.png"
+        },
+        {
+          "x": 640,
+          "y": 256,
+          "w": 128,
+          "h": 128,
+          "file": "frames/search/05.png"
+        }
+      ],
+      "strip": "animations/search.png"
+    },
+    "point": {
+      "id": "point",
+      "row": 3,
+      "fps": 10,
+      "loop": false,
+      "next": "idle",
+      "motion": "stationary",
+      "category": "utility",
+      "label": "Assenyalar",
+      "sheet": "utility",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/point/00.png"
+        },
+        {
+          "x": 128,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/point/01.png"
+        },
+        {
+          "x": 256,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/point/02.png"
+        },
+        {
+          "x": 384,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/point/03.png"
+        },
+        {
+          "x": 512,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/point/04.png"
+        },
+        {
+          "x": 640,
+          "y": 384,
+          "w": 128,
+          "h": 128,
+          "file": "frames/point/05.png"
+        }
+      ],
+      "strip": "animations/point.png"
+    },
+    "surprise": {
+      "id": "surprise",
+      "row": 4,
+      "fps": 12,
+      "loop": false,
+      "next": "idle",
+      "motion": "stationary",
+      "category": "utility",
+      "label": "Sorprendre’s",
+      "sheet": "utility",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/surprise/00.png"
+        },
+        {
+          "x": 128,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/surprise/01.png"
+        },
+        {
+          "x": 256,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/surprise/02.png"
+        },
+        {
+          "x": 384,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/surprise/03.png"
+        },
+        {
+          "x": 512,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/surprise/04.png"
+        },
+        {
+          "x": 640,
+          "y": 512,
+          "w": 128,
+          "h": 128,
+          "file": "frames/surprise/05.png"
+        }
+      ],
+      "strip": "animations/surprise.png"
+    },
+    "released": {
+      "id": "released",
+      "row": 5,
+      "fps": 12,
+      "loop": false,
+      "next": "fall",
+      "motion": "air",
+      "category": "utility",
+      "label": "Reaccionar en deixar-lo anar",
+      "sheet": "utility",
+      "frameCount": 6,
+      "directional": true,
+      "pivot": {
+        "x": 64,
+        "y": 112
+      },
+      "frames": [
+        {
+          "x": 0,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/released/00.png"
+        },
+        {
+          "x": 128,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/released/01.png"
+        },
+        {
+          "x": 256,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/released/02.png"
+        },
+        {
+          "x": 384,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/released/03.png"
+        },
+        {
+          "x": 512,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/released/04.png"
+        },
+        {
+          "x": 640,
+          "y": 640,
+          "w": 128,
+          "h": 128,
+          "file": "frames/released/05.png"
+        }
+      ],
+      "strip": "animations/released.png"
+    }
+  },
+  "aliases": {
+    "idle_right": {
+      "animation": "idle",
+      "flipX": false
+    },
+    "idle_left": {
+      "animation": "idle",
+      "flipX": true
+    },
+    "walk_right": {
+      "animation": "walk",
+      "flipX": false
+    },
+    "walk_left": {
+      "animation": "walk",
+      "flipX": true
+    },
+    "run_right": {
+      "animation": "run",
+      "flipX": false
+    },
+    "run_left": {
+      "animation": "run",
+      "flipX": true
+    },
+    "jump_right": {
+      "animation": "jump",
+      "flipX": false
+    },
+    "jump_left": {
+      "animation": "jump",
+      "flipX": true
+    },
+    "fall_right": {
+      "animation": "fall",
+      "flipX": false
+    },
+    "fall_left": {
+      "animation": "fall",
+      "flipX": true
+    },
+    "land_right": {
+      "animation": "land",
+      "flipX": false
+    },
+    "land_left": {
+      "animation": "land",
+      "flipX": true
+    },
+    "climb_right": {
+      "animation": "climb",
+      "flipX": false
+    },
+    "climb_left": {
+      "animation": "climb",
+      "flipX": true
+    },
+    "wall_idle_right": {
+      "animation": "wall_idle",
+      "flipX": false
+    },
+    "wall_idle_left": {
+      "animation": "wall_idle",
+      "flipX": true
+    },
+    "ceiling_crawl_right": {
+      "animation": "ceiling_crawl",
+      "flipX": false
+    },
+    "ceiling_crawl_left": {
+      "animation": "ceiling_crawl",
+      "flipX": true
+    },
+    "web_shoot_right": {
+      "animation": "web_shoot",
+      "flipX": false
+    },
+    "web_shoot_left": {
+      "animation": "web_shoot",
+      "flipX": true
+    },
+    "web_hang_right": {
+      "animation": "web_hang",
+      "flipX": false
+    },
+    "web_hang_left": {
+      "animation": "web_hang",
+      "flipX": true
+    },
+    "web_swing_right": {
+      "animation": "web_swing",
+      "flipX": false
+    },
+    "web_swing_left": {
+      "animation": "web_swing",
+      "flipX": true
+    },
+    "listen_right": {
+      "animation": "listen",
+      "flipX": false
+    },
+    "listen_left": {
+      "animation": "listen",
+      "flipX": true
+    },
+    "think_right": {
+      "animation": "think",
+      "flipX": false
+    },
+    "think_left": {
+      "animation": "think",
+      "flipX": true
+    },
+    "work_right": {
+      "animation": "work",
+      "flipX": false
+    },
+    "work_left": {
+      "animation": "work",
+      "flipX": true
+    },
+    "talk_right": {
+      "animation": "talk",
+      "flipX": false
+    },
+    "talk_left": {
+      "animation": "talk",
+      "flipX": true
+    },
+    "success_right": {
+      "animation": "success",
+      "flipX": false
+    },
+    "success_left": {
+      "animation": "success",
+      "flipX": true
+    },
+    "error_right": {
+      "animation": "error",
+      "flipX": false
+    },
+    "error_left": {
+      "animation": "error",
+      "flipX": true
+    },
+    "wave_right": {
+      "animation": "wave",
+      "flipX": false
+    },
+    "wave_left": {
+      "animation": "wave",
+      "flipX": true
+    },
+    "sit_right": {
+      "animation": "sit",
+      "flipX": false
+    },
+    "sit_left": {
+      "animation": "sit",
+      "flipX": true
+    },
+    "sleep_right": {
+      "animation": "sleep",
+      "flipX": false
+    },
+    "sleep_left": {
+      "animation": "sleep",
+      "flipX": true
+    },
+    "wake_right": {
+      "animation": "wake",
+      "flipX": false
+    },
+    "wake_left": {
+      "animation": "wake",
+      "flipX": true
+    },
+    "drag_right": {
+      "animation": "drag",
+      "flipX": false
+    },
+    "drag_left": {
+      "animation": "drag",
+      "flipX": true
+    },
+    "peek_right": {
+      "animation": "peek",
+      "flipX": false
+    },
+    "peek_left": {
+      "animation": "peek",
+      "flipX": true
+    },
+    "brake_right": {
+      "animation": "brake",
+      "flipX": false
+    },
+    "brake_left": {
+      "animation": "brake",
+      "flipX": true
+    },
+    "read_right": {
+      "animation": "read",
+      "flipX": false
+    },
+    "read_left": {
+      "animation": "read",
+      "flipX": true
+    },
+    "search_right": {
+      "animation": "search",
+      "flipX": false
+    },
+    "search_left": {
+      "animation": "search",
+      "flipX": true
+    },
+    "point_right": {
+      "animation": "point",
+      "flipX": false
+    },
+    "point_left": {
+      "animation": "point",
+      "flipX": true
+    },
+    "surprise_right": {
+      "animation": "surprise",
+      "flipX": false
+    },
+    "surprise_left": {
+      "animation": "surprise",
+      "flipX": true
+    },
+    "released_right": {
+      "animation": "released",
+      "flipX": false
+    },
+    "released_left": {
+      "animation": "released",
+      "flipX": true
+    },
+    "climb_down": {
+      "animation": "climb",
+      "reverse": true,
+      "label": "Baixar per la paret",
+      "motion": "wall",
+      "directionY": 1
+    },
+    "climb_down_right": {
+      "animation": "climb",
+      "reverse": true,
+      "flipX": false
+    },
+    "climb_down_left": {
+      "animation": "climb",
+      "reverse": true,
+      "flipX": true
+    },
+    "web_descend": {
+      "animation": "web_hang",
+      "reverse": false,
+      "label": "Baixar amb la teranyina",
+      "motion": "web",
+      "directionY": 1
+    },
+    "web_descend_right": {
+      "animation": "web_hang",
+      "reverse": false,
+      "flipX": false
+    },
+    "web_descend_left": {
+      "animation": "web_hang",
+      "reverse": false,
+      "flipX": true
+    },
+    "jump_air": {
+      "animation": "fall",
+      "label": "En l’aire"
+    }
+  },
+  "runtimeHints": {
+    "rootMotion": false,
+    "interpolation": "nearest",
+    "webLine": "drawByRuntime",
+    "webOriginCoordinates": "frameLocal",
+    "mirrorAnchorsWithFlipX": true,
+    "physicsOverridesNext": true,
+    "nextMeaning": "Transició visual per defecte; els esdeveniments de física o de l’agent tenen prioritat.",
+    "talkStyle": "Gestos del cap i dels braços, sense afegir una boca a la màscara.",
+    "dragBehavior": "La posició segueix el cursor i la física queda en pausa fins que l’usuari deixa anar el personatge.",
+    "frameCoordinates": "top-left, in pixels",
+    "pivotCoordinates": "frame-local, in pixels"
+  },
+  "provenance": {
+    "art": "Generated using built-in imagegen from user reference",
+    "exports": "Mechanical slicing, canvas alignment and nearest-neighbour resizing; original atlases included"
+  }
+}
