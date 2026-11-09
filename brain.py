@@ -36,6 +36,8 @@ from abilities.window_manager import (
 from config import DATA_DIR, get_config
 from memory import CapriMemory, SpiderMemory
 from persona import build, reminder
+from abilities.universal_intent_pipeline import ConversationContext, contextualize_query, resolve_universal_work_order
+from abilities.web_search_engine import smart_web_research, get_live_news, search_web_information
 
 # Ensure UTF-8 output encoding for proper terminal character rendering across platforms
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -496,12 +498,10 @@ def manage_files(action: str = "read", path: str = "", content: str = "", **kwar
     """
     act = (action or "read").strip().lower()
 
-    # CRITICAL SECURITY BARRIER: Unconditional block on deletions
+    # CRITICAL SECURITY BARRIER: File deletions are safely quarantined in ~/.capri_trash
     if act in ("delete", "remove", "unlink", "rm"):
-        return (
-            "Status: ACCESS DENIED. Action too destructive. "
-            "Suggest to the user moving the file to trash instead, or refuse in character."
-        )
+        from abilities.file_explorer import delete_file_safely
+        return delete_file_safely(str(target_path))
 
     clean_path_str = (path or kwargs.get("file") or kwargs.get("target") or "").strip()
     if not clean_path_str:
@@ -592,9 +592,42 @@ def set_reminder(kind: str = "timer", when: str = "", what: str = "", **kwargs) 
 
 
 def get_weather(city: str = "", **kwargs) -> str:
-    """Fetches real-time weather information for a specified city."""
-    target = (city or kwargs.get("location") or "local area").strip()
-    return f"Status: Weather for {target}: 22°C, moderate breeze, clear skies."
+    """Fetches real-time weather information and forecast for a specified city using lightweight live meteorology service."""
+    from config import get_config
+    cfg = get_config()
+    target_city = (city or kwargs.get("location") or kwargs.get("target") or cfg.get("default_city", "Vic")).strip()
+    try:
+        import urllib.request, urllib.parse, json
+        encoded = urllib.parse.quote(target_city)
+        url = f"https://wttr.in/{encoded}?format=j1"
+        req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
+        with urllib.request.urlopen(req, timeout=3.5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            cur = data["current_condition"][0]
+            temp = cur["temp_C"]
+            feels = cur["FeelsLikeC"]
+            desc = cur.get("lang_es", [{}])[0].get("value") or cur["weatherDesc"][0]["value"]
+            humidity = cur["humidity"]
+            wind = cur["windspeedKmph"]
+
+            # Forecast rain probability
+            hourly = data.get("weather", [{}])[0].get("hourly", [])
+            chance_rain = max([int(h.get("chanceofrain", 0)) for h in hourly], default=0)
+            rain_note = f"Probabilidad de lluvia hoy: {chance_rain}%."
+            if chance_rain > 50:
+                rain_note += " (Alta probabilidad de lluvia/precipitaciones)."
+            elif chance_rain < 20:
+                rain_note += " (Cielo mayormente despejado sin riesgo de lluvia)."
+
+            return (
+                f"Status: Tiempo meteorológico real en {target_city.capitalize()}:\n"
+                f"- Temperatura: {temp}°C (Sensación térmica: {feels}°C)\n"
+                f"- Estado del cielo: {desc}\n"
+                f"- {rain_note}\n"
+                f"- Humedad: {humidity}%, Viento: {wind} km/h."
+            )
+    except Exception as e:
+        return f"Status: Error al conectar con el servicio meteorológico para '{target_city}' ({e})."
 
 
 def take_screenshot(**kwargs) -> str:
@@ -901,6 +934,28 @@ def interact_window(action: str = "move", app_name: str = "", direction: str = "
 # ==============================================================================
 
 from abilities.agent_interaction import browser_search, type_in_app, press_hotkey
+from abilities.file_explorer import (
+    open_folder,
+    list_folder_contents,
+    search_and_format_files,
+    read_file_preview,
+    create_file,
+    create_folder,
+    edit_file,
+    delete_file_safely,
+)
+from abilities.dev_assistant import (
+    inspect_project,
+    analyze_code,
+    brainstorm_project_ideas,
+    run_code_check,
+)
+from abilities.pattern_learning import (
+    learn_pattern,
+    list_learned_patterns,
+    get_pattern_learner,
+)
+from abilities.care_advisor import get_proactive_advice
 from abilities.custom_commands import (
     find_matching_command,
     get_command,
@@ -992,6 +1047,10 @@ AVAILABLE_TOOLS: List[Callable] = [
     browser_search,
     type_in_app,
     press_hotkey,
+    open_folder,
+    list_folder_contents,
+    search_and_format_files,
+    read_file_preview,
     run_custom_command,
     manage_custom_commands,
     play_song,
@@ -1007,6 +1066,9 @@ AVAILABLE_TOOLS: List[Callable] = [
     remember,
     interact_window,
     perch_window,
+    smart_web_research,
+    get_live_news,
+    search_web_information,
 ]
 
 # Dispatch mapping for tool invocations
@@ -1023,6 +1085,51 @@ TOOL_REGISTRY: Dict[str, Callable] = {
     "browser_search": browser_search,
     "navegador_buscar": browser_search,
     "buscar_en_navegador": browser_search,
+    "smart_web_research": smart_web_research,
+    "get_live_news": get_live_news,
+    "search_web_information": search_web_information,
+    "noticias": get_live_news,
+    "live_news": get_live_news,
+    "investigar": smart_web_research,
+    "open_folder": open_folder,
+    "abrir_carpeta": open_folder,
+    "open_directory": open_folder,
+    "list_folder": list_folder_contents,
+    "listar_carpeta": list_folder_contents,
+    "ver_carpeta": list_folder_contents,
+    "find_files": search_and_format_files,
+    "buscar_archivos": search_and_format_files,
+    "buscar_archivo": search_and_format_files,
+    "read_file": read_file_preview,
+    "leer_archivo": read_file_preview,
+    "create_file": create_file,
+    "crear_archivo": create_file,
+    "create_folder": create_folder,
+    "crear_carpeta": create_folder,
+    "edit_file": edit_file,
+    "editar_archivo": edit_file,
+    "delete_file": delete_file_safely,
+    "delete_file_safely": delete_file_safely,
+    "eliminar_archivo": delete_file_safely,
+    "borrar_archivo": delete_file_safely,
+    "inspect_project": inspect_project,
+    "analizar_proyecto": inspect_project,
+    "inspeccionar_proyecto": inspect_project,
+    "analyze_code": analyze_code,
+    "analizar_codigo": analyze_code,
+    "explicar_codigo": analyze_code,
+    "brainstorm_project_ideas": brainstorm_project_ideas,
+    "ideas_proyecto": brainstorm_project_ideas,
+    "run_code_check": run_code_check,
+    "comprobar_codigo": run_code_check,
+    "test_codigo": run_code_check,
+    "learn_pattern": learn_pattern,
+    "aprender_patron": learn_pattern,
+    "list_learned_patterns": list_learned_patterns,
+    "listar_patrones": list_learned_patterns,
+    "care_advice": lambda **kw: get_proactive_advice(force=True),
+    "consejo": lambda **kw: get_proactive_advice(force=True),
+    "sentido_aracnido": lambda **kw: get_proactive_advice(force=True),
     "type_in_app": type_in_app,
     "type_text": type_in_app,
     "escribir_texto": type_in_app,
@@ -1096,16 +1203,27 @@ class SyntheticToolCall:
         self.function = fn
 
 
-def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
+def _detect_action_intent(text: str, context: Optional[ConversationContext] = None) -> Optional[SyntheticToolCall]:
     """
     Parses conversational user input for direct desktop action commands.
     Provides deterministic intent fallback when a local SLM fails to generate tool calls.
+    Supports multi-turn context tracking across conversational turns.
     """
     t = (text or "").strip()
     if not t:
         return None
 
-    # 0. Custom Commands (Macros) Check
+    # 0. UNIVERSAL SEMANTIC WORK ORDER PIPELINE (Entity & Slot Extraction + Multi-turn Context)
+    try:
+        work_order = resolve_universal_work_order(t, context=context)
+        if work_order and work_order.get("action"):
+            act_name = work_order["action"]
+            act_params = work_order.get("params", {})
+            return SyntheticToolCall(SyntheticFunction(act_name, act_params))
+    except Exception as pipe_err:
+        print(f"[brain] Warning in universal pipeline: {pipe_err}")
+
+    # 0.1 Custom Commands (Macros) Check
     matched_cmd = find_matching_command(t)
     if matched_cmd:
         return SyntheticToolCall(SyntheticFunction("run_custom_command", {"name": matched_cmd["name"]}))
@@ -1115,6 +1233,30 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
     compound_steps = parse_compound_chained_request(t)
     if compound_steps:
         return SyntheticToolCall(SyntheticFunction("run_custom_command", {"name": "secuencia_multipasos", "actions": compound_steps}))
+
+    # 0.2 Developer Assistance & Pattern Learning Intent
+    from abilities.smart_intent import parse_developer_and_pattern_request
+    dev_intent = parse_developer_and_pattern_request(t)
+    if dev_intent:
+        act = dev_intent.get("action")
+        if act == "inspect_project":
+            return SyntheticToolCall(SyntheticFunction("inspect_project", {"target": dev_intent.get("target", "")}))
+        elif act == "analyze_code":
+            return SyntheticToolCall(SyntheticFunction("analyze_code", {"target": dev_intent.get("target", "")}))
+        elif act == "brainstorm_project_ideas":
+            return SyntheticToolCall(SyntheticFunction("brainstorm_project_ideas", {"target": dev_intent.get("target", "")}))
+        elif act == "run_code_check":
+            return SyntheticToolCall(SyntheticFunction("run_code_check", {"target": dev_intent.get("target", "")}))
+        elif act == "list_learned_patterns":
+            return SyntheticToolCall(SyntheticFunction("list_learned_patterns", {}))
+        elif act == "learn_pattern":
+            return SyntheticToolCall(SyntheticFunction("learn_pattern", {
+                "kind": dev_intent.get("kind", "project"),
+                "name": dev_intent.get("name", ""),
+                "value": dev_intent.get("value", "")
+            }))
+        elif act in TOOL_REGISTRY:
+            return SyntheticToolCall(SyntheticFunction(act, dev_intent.get("params", {})))
 
     # 1.0 Smart Semantic Browser Search & Navigation (e.g. "en brave busca youtube", "entra a brave y busca X", "abre youtube", "busca X en brave")
     smart_nav = parse_browser_or_search_request(t)
@@ -1128,6 +1270,36 @@ def _detect_action_intent(text: str) -> Optional[SyntheticToolCall]:
             }))
         elif act_name == "open_website":
             return SyntheticToolCall(SyntheticFunction("open_website", {"url": smart_nav["url"]}))
+
+    # 1.05 File System Navigation & Folder Inspection & Proactive Advice
+    from abilities.smart_intent import parse_file_or_folder_request
+    file_intent = parse_file_or_folder_request(t)
+    if file_intent:
+        act = file_intent.get("action")
+        if act == "open_folder":
+            return SyntheticToolCall(SyntheticFunction("open_folder", {"target": file_intent.get("target", "")}))
+        elif act == "list_folder":
+            return SyntheticToolCall(SyntheticFunction("list_folder", {"target": file_intent.get("target", "")}))
+        elif act == "find_files":
+            return SyntheticToolCall(SyntheticFunction("find_files", {"query": file_intent.get("query", "")}))
+        elif act == "read_file":
+            return SyntheticToolCall(SyntheticFunction("read_file", {"target": file_intent.get("target", "")}))
+        elif act == "create_file":
+            return SyntheticToolCall(SyntheticFunction("create_file", {
+                "target": file_intent.get("target", ""),
+                "content": file_intent.get("content", "")
+            }))
+        elif act == "create_folder":
+            return SyntheticToolCall(SyntheticFunction("create_folder", {"target": file_intent.get("target", "")}))
+        elif act == "edit_file":
+            return SyntheticToolCall(SyntheticFunction("edit_file", {
+                "target": file_intent.get("target", ""),
+                "append_text": file_intent.get("append_text", "")
+            }))
+        elif act == "delete_file_safely":
+            return SyntheticToolCall(SyntheticFunction("delete_file_safely", {"target": file_intent.get("target", "")}))
+        elif act == "care_advice":
+            return SyntheticToolCall(SyntheticFunction("care_advice", {}))
 
     # 1.1 In-app typing (typing text into active window, browser search bar, chat, editor)
     type_match = re.search(
@@ -1378,6 +1550,59 @@ def _clean_bot_cliches(text: str) -> str:
     return res
 
 
+def _generate_contextual_fallback(action_name: str, args: Dict[str, Any], tool_result: str, user_name: str) -> str:
+    """Generates an in-character contextual response directly reflecting the tool's execution result."""
+    clean_res = tool_result.replace("Status:", "").strip()
+    # 1. Weather
+    if action_name == "get_weather":
+        first_line = clean_res.split("\n")[0]
+        return f"¡Radar meteorológico listo, {user_name}! {first_line}. Si sales de patrulla, ya sabes cómo está el cielo."
+    # 2. File creation
+    if action_name == "create_file":
+        tgt = Path(args.get("target", "archivo")).name
+        return f"¡Hecho, {user_name}! Acabo de crear '{tgt}' con tus telarañas en orden en la ruta especificada."
+    # 3. File deletion
+    if action_name in ("delete_file_safely", "delete_file"):
+        tgt = Path(args.get("target", "archivo")).name
+        return f"¡Despejado, socio! '{tgt}' ha ido a la papelera segura de Capri por si acaso."
+    # 4. File read
+    if action_name == "read_file":
+        tgt = Path(args.get("target", "archivo")).name
+        preview = clean_res[:160].replace("\n", " ")
+        return f"Le he echado una lectura a '{tgt}', {user_name}: {preview}..."
+    # 5. File edit
+    if action_name == "edit_file":
+        tgt = Path(args.get("target", "archivo")).name
+        return f"¡Archivo '{tgt}' actualizado con éxito, {user_name}! El nuevo contenido ya está guardado."
+    # 6. Folder actions
+    if action_name in ("list_folder", "open_folder", "create_folder"):
+        tgt = args.get("target") or "la carpeta"
+        return f"¡Operación en '{tgt}' completada con éxito, {user_name}!"
+    # 7. Project & Dev
+    if action_name == "inspect_project":
+        tgt = args.get("target") or "el proyecto"
+        return f"¡Escaneado completado, {user_name}! He revisado la arquitectura de '{tgt}'; todo estructurado y en orden."
+    if action_name == "brainstorm_project_ideas":
+        return f"¡Aquí tienes varias propuestas de mejora y optimización para el proyecto, {user_name}!"
+    if action_name == "run_code_check":
+        return f"¡Comprobación de código terminada, {user_name}! {clean_res.splitlines()[0]}"
+    # 8. Patterns
+    if action_name == "list_learned_patterns":
+        return f"¡Aquí tengo mi libreta de laboratorio, {user_name}! Tengo registrados tus patrones, proyectos y hábitos de trabajo."
+    # 9. Real-time news & Web research
+    if action_name == "get_live_news":
+        first_headline = clean_res.split("\n")[1] if "\n" in clean_res else clean_res
+        return f"¡Aquí tienes el teletipo de última hora, {user_name}! {first_headline}."
+    if action_name in ("smart_web_research", "search_web_information"):
+        q = args.get("query", "el tema")
+        first_finding = clean_res.split("\n")[1] if "\n" in clean_res else clean_res
+        return f"¡He investigado en la red sobre '{q}', {user_name}! {first_finding}."
+
+    # Generic intelligent fallback
+    first_summary = clean_res.splitlines()[0] if clean_res else "Acción procesada con éxito."
+    return f"¡Listo, {user_name}! {first_summary}"
+
+
 # ==============================================================================
 # SECTION 3: SPIDER-MAN BRAIN CORE CLASS
 # ==============================================================================
@@ -1399,6 +1624,9 @@ class SpiderBrain:
         self.temperature: float = self.cfg.get("ollama.temperature", 0.7)
         self.user_name: str = self.cfg.get("user_name", "Deivid")
         self.language: str = self.cfg.get("language", "es")
+
+        # Multi-turn conversation state context tracker
+        self.context: ConversationContext = ConversationContext()
 
         # Memory manager instance
         self.memory = SHARED_MEMORY
@@ -1454,6 +1682,13 @@ class SpiderBrain:
         except Exception:
             return False
 
+    def unload_model(self) -> None:
+        """Immediately unloads the LLM from GPU/VRAM to free resources for the host OS."""
+        try:
+            self.client.generate(model=self.model, keep_alive=0)
+        except Exception:
+            pass
+
     def _extract_tool_calls(self, message) -> List:
         """Detects tool calls from official Ollama field or raw JSON content."""
         if getattr(message, "tool_calls", None):
@@ -1474,19 +1709,36 @@ class SpiderBrain:
     def talk(self, user_text: str, on_chunk: Optional[Callable[[str], None]] = None) -> str:
         """
         Processes a conversational turn with speed optimization & token streaming:
-        1. Checks action intent and executes tool immediately on the host machine.
-        2. Feeds actual execution result directly to Spider-Man for in-character confirmation.
-        3. Supports open-ended tool calling for queries outside predefined regex patterns.
-        4. Saves clean conversation history and persists with save_memory().
+        1. Contextualizes user text with multi-turn coreference & anaphora resolution.
+        2. Checks action intent and executes tool immediately on the host machine.
+        3. Feeds actual observation context directly to Spider-Man for in-character dialogue.
+        4. Supports open-ended tool calling for queries outside predefined patterns.
+        5. Tracks conversation state and updates persistent memory.
         """
+        # Multi-turn contextual query resolution (resolves pronouns, deictic references, ellipses)
+        resolved_text, ctx_meta = contextualize_query(user_text, self.context)
+
         # Build ephemeral request payload with dynamic reminder
         dynamic_reminder = reminder(language=self.language)
 
         # Retrieve relevant long-term memory facts
-        relevant_facts = self.memory.relevant_facts(user_text, speaker=self.user_name, limit=4)
+        relevant_facts = self.memory.relevant_facts(resolved_text, speaker=self.user_name, limit=4)
         facts_context = ""
         if relevant_facts:
             facts_context = f"\n[(Things you remember about {self.user_name}, use only if relevant: {'; '.join(relevant_facts)})]"
+
+        # Retrieve learned developer preferences & patterns
+        patterns_context = ""
+        try:
+            learner = get_pattern_learner()
+            prefs = [f"{k}: {v}" for k, v in learner.data.get("preferences", {}).items()]
+            if prefs:
+                patterns_context = f"\n[(Developer preferences & habits: {'; '.join(prefs[:3])})]"
+        except Exception:
+            pass
+
+        # Active conversation context summary (maintains multi-turn topic & entity continuity)
+        active_context_prompt = self.context.get_context_prompt()
 
         # Real-time host telemetry & temporal anchoring
         import datetime
@@ -1505,7 +1757,7 @@ class SpiderBrain:
         # PATH 1: DIRECT DETERMINISTIC AGENT EXECUTION
         # (Executes instantly on host machine, avoiding SLM tool hallucinations)
         # ----------------------------------------------------------------------
-        action_intent = _detect_action_intent(user_text)
+        action_intent = _detect_action_intent(resolved_text, context=self.context)
         if action_intent:
             name = action_intent.function.name
             args = action_intent.function.arguments if hasattr(action_intent.function, "arguments") else {}
@@ -1515,22 +1767,34 @@ class SpiderBrain:
                 except Exception:
                     args = {}
 
-            # Allow GUI thread to render Spidey's action animation (e.g. web-shoot/point) before window pops up
+            # Allow GUI thread to render Spidey's action animation before window pops up
             time.sleep(0.35)
             tool_func = TOOL_REGISTRY.get(name)
             if tool_func:
                 tool_result = tool_func(**args)
+                try:
+                    get_pattern_learner().record_usage(name)
+                except Exception:
+                    pass
             else:
                 tool_result = f"Error: Tool '{name}' not found."
 
+            # Update multi-turn conversational context with executed tool & output
+            self.context.update_from_work_order(name, args, tool_result)
+
+            # Rich observation context replacing rigid hardcoding
             system_instruction = (
-                f"\n\n[(ACTION COMPLETED: You have just executed this command on {self.user_name}'s PC:\n"
-                f"{tool_result}\n"
-                f"MANDATORY INSTRUCTION: Respond in character as Spider-Man (Peter Parker) in 1 or 2 short sentences "
-                f"confirming what you just did with your witty, scientific, sarcastic personality. "
-                f"STRICT RULE: The action is ALREADY DONE. Do NOT explain how the user can click buttons or menus themselves, and do NOT make excuses saying you cannot do it.)]"
+                f"\n\n[(OBSERVATION CONTEXT (Host execution on {self.user_name}'s PC):\n"
+                f"Executed Action: {name}\n"
+                f"Parameters: {json.dumps(args, ensure_ascii=False)}\n"
+                f"Observation Output:\n{tool_result}\n\n"
+                f"CONVERSATIONAL INSTRUCTIONS:\n"
+                f"1. You are SPIDER-MAN (Peter Parker). Respond warmly, wittily, and naturally in 1 to 3 short sentences.\n"
+                f"2. DIRECTLY ANSWER {self.user_name}'s query using the Observation Output above. If they asked about weather or forecast, give the weather; if they asked to analyze code or a project, discuss the findings; if they asked to create/delete a file, confirm it cleanly.\n"
+                f"3. STRICT PROHIBITION: Do NOT use formulaic robotic confirmations like '¡Acción completada con éxito, socio!' or 'He ejecutado la orden'. Talk naturally as Peter Parker chatting with his lab partner.\n"
+                f"4. Maintain conversational continuity with previous turns in the dialogue.)]"
             )
-            ephemeral_user_content = f"{user_text}\n\n{dynamic_reminder}{facts_context}{live_telemetry}{system_instruction}"
+            ephemeral_user_content = f"{resolved_text}\n\n{dynamic_reminder}{facts_context}{patterns_context}{active_context_prompt}{live_telemetry}{system_instruction}"
             ephemeral_messages = list(self.history) + [
                 {"role": "user", "content": ephemeral_user_content}
             ]
@@ -1562,21 +1826,24 @@ class SpiderBrain:
                 # Clean message history persistence
                 self.history.append({"role": "user", "content": user_text})
                 self.history.append({"role": "assistant", "content": final_reply})
+                self.context.update_from_turn(user_text, final_reply)
                 self.trim_history()
                 self.save_memory()
                 return final_reply
 
             except ConnectionError:
-                fallback_reply = f"¡Acción completada con éxito, socio! He ejecutado la orden en tu equipo."
+                fallback_reply = _generate_contextual_fallback(name, args, tool_result, self.user_name)
                 self.history.append({"role": "user", "content": user_text})
                 self.history.append({"role": "assistant", "content": fallback_reply})
+                self.context.update_from_turn(user_text, fallback_reply)
                 self.trim_history()
                 self.save_memory()
                 return fallback_reply
             except Exception as ex:
-                fallback_reply = f"¡Marchando! Acción completada en el sistema a tu orden."
+                fallback_reply = _generate_contextual_fallback(name, args, tool_result, self.user_name)
                 self.history.append({"role": "user", "content": user_text})
                 self.history.append({"role": "assistant", "content": fallback_reply})
+                self.context.update_from_turn(user_text, fallback_reply)
                 self.trim_history()
                 self.save_memory()
                 return fallback_reply
@@ -1584,7 +1851,7 @@ class SpiderBrain:
         # ----------------------------------------------------------------------
         # PATH 2: GENERAL CHAT & OPEN-ENDED TOOL INVOCATION
         # ----------------------------------------------------------------------
-        ephemeral_user_content = f"{user_text}\n\n{dynamic_reminder}{facts_context}{live_telemetry}"
+        ephemeral_user_content = f"{resolved_text}\n\n{dynamic_reminder}{facts_context}{patterns_context}{active_context_prompt}{live_telemetry}"
         ephemeral_messages = list(self.history) + [
             {"role": "user", "content": ephemeral_user_content}
         ]
@@ -1633,6 +1900,10 @@ class SpiderBrain:
                 if name in TOOL_REGISTRY:
                     tool_func = TOOL_REGISTRY[name]
                     result = tool_func(**args)
+                    try:
+                        get_pattern_learner().record_usage(name)
+                    except Exception:
+                        pass
                 else:
                     result = f"Error: Tool '{name}' is not recognized."
                     print(f">>> [EXECUTION] Unknown tool requested: {name}")
@@ -1701,6 +1972,7 @@ class SpiderBrain:
             final_reply = _clean_bot_cliches(final_reply)
             self.history.append({"role": "user", "content": user_text})
             self.history.append({"role": "assistant", "content": final_reply})
+            self.context.update_from_turn(user_text, final_reply)
             self.trim_history()
             self.save_memory()
             return final_reply
@@ -1710,6 +1982,7 @@ class SpiderBrain:
             reply = _clean_bot_cliches((assistant_msg.content or "").strip())
             self.history.append({"role": "user", "content": user_text})
             self.history.append({"role": "assistant", "content": reply})
+            self.context.update_from_turn(user_text, reply)
             self.trim_history()
             self.save_memory()
             return reply

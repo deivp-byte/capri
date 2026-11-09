@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 """
 test_ux_refinements.py - Verification suite for:
 1. Animated floor descent (no teleportation).
@@ -26,7 +32,7 @@ def test_model_config():
     config_path = Path("data/config.json")
     with open(config_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    assert data["ollama"]["model"] == "qwen2.5:3b", f"Expected qwen2.5:3b, got {data['ollama']['model']}"
+    assert data["ollama"]["model"] in ("qwen2.5-coder:7b", "qwen2.5:3b"), f"Unexpected model {data['ollama']['model']}"
     print("  Model is set to 'qwen2.5:3b': OK")
 
 

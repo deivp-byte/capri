@@ -39,6 +39,8 @@ class SpiderBubble(QWidget):
     """
 
     submitted = Signal(str)
+    user_typing = Signal()
+    typing_finished = Signal()
 
     # Cyberpunk Color Palette
     BG_PANEL = QColor(16, 14, 24, 235)
@@ -114,7 +116,13 @@ class SpiderBubble(QWidget):
             }
         """)
         self.edit.returnPressed.connect(self._on_submit)
+        self.edit.textEdited.connect(self._on_text_edited)
         self.edit.installEventFilter(self)
+
+    def _on_text_edited(self, text: str) -> None:
+        """Notifies pet that user is actively typing so Spidey listens."""
+        if text.strip():
+            self.user_typing.emit()
 
     def eventFilter(self, obj, event):
         """Intercepts Escape key from QLineEdit input field to trigger instant task cancel."""
@@ -209,6 +217,8 @@ class SpiderBubble(QWidget):
     def dismiss(self) -> None:
         """Closes the bubble."""
         self.hide()
+        if hasattr(self.parent_pet, "on_bubble_dismissed"):
+            self.parent_pet.on_bubble_dismissed()
 
     # --------------------------------------------------------------------------
     # LAYOUT & REPOSITIONING
@@ -312,6 +322,7 @@ class SpiderBubble(QWidget):
                 self._finished_typing_at = now
                 reading_duration = max(10.0, len(self.full_reply) * 0.07)
                 self.hold_until = max(self.hold_until, now + reading_duration)
+                self.typing_finished.emit()
 
         # 2. If user is hovering mouse over bubble or typing in input, pause auto-dismiss
         if self.underMouse() or self.edit.hasFocus():
