@@ -33,11 +33,11 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     # Strictly Ollama local settings (optimized for speed and low VRAM)
     "ollama": {
         "host": "http://localhost:11434",
-        "model": "qwen2.5:3b", # High-performance 3B SLM (3.5x faster than 7B, ~2GB VRAM)
-        "keep_alive": "5m",     # Keeps model warm for 5 minutes, eliminating reload latency
-        "num_ctx": 2048,        # Restricts context to avoid OOM
+        "model": "qwen2.5-coder:7b", # Leading coding SLM (<5GB VRAM, highly accurate)
+        "keep_alive": "2m",          # Auto-unloads from VRAM after 2m idle, freeing GPU for OS
+        "num_ctx": 2048,             # Restricts context to avoid OOM
         "temperature": 0.7,
-        "max_tokens": 160,      # Capped to 1-3 sentences for fast response generation
+        "max_tokens": 160,           # Fast response generation
     },
     
     # UI / PySide6 Window Configuration

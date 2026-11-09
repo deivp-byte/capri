@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 import subprocess
 import shutil
 import time
@@ -346,3 +347,200 @@ def _format_size(size_bytes: int) -> str:
         return f"{size_bytes / (1024 * 1024):.1f} MB"
     else:
         return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
+# ==============================================================================
+# SAFE FILE CREATION, EDITING & DELETION (RECYCLE / TRASH)
+# ==============================================================================
+
+TRASH_DIR = HOME_DIR / ".capri_trash"
+
+
+def is_safe_operation_path(p: Path) -> Tuple[bool, str]:
+    """
+    Validates that a path is safe for modification/deletion:
+    - Must be within user home or workspace / personal projects.
+    - Cannot be system roots (C:/, Windows, Program Files, user root directory itself).
+    """
+    try:
+        resolved = p.resolve()
+        
+        # Blacklist critical system directories
+        critical = [
+            Path("C:/"), Path("C:/Windows"), Path("C:/Program Files"),
+            Path("C:/Program Files (x86)"), HOME_DIR, WORKSPACE_DIR.anchor
+        ]
+        if resolved in critical or str(resolved).lower().startswith("c:\\windows"):
+            return False, f"Operación denegada por seguridad: '{resolved}' es una ruta crítica del sistema."
+
+        # Whitelist safe root spaces
+        allowed_roots = [HOME_DIR, WORKSPACE_DIR]
+        if Path("C:/Archivos").exists():
+            allowed_roots.append(Path("C:/Archivos").resolve())
+
+        is_allowed = any(root == resolved or root in resolved.parents for root in allowed_roots)
+        if not is_allowed:
+            return False, f"Operación denegada: '{resolved}' está fuera de los directorios permitidos de usuario."
+
+        return True, "OK"
+    except Exception as e:
+        return False, f"Ruta inválida: {e}"
+
+
+def create_file(target: str, content: str = "") -> str:
+    """
+    Safely creates a new file with the specified content.
+    """
+    clean = (target or "").strip()
+    if not clean:
+        return "Status: Error - No se proporcionó el nombre o ruta del archivo a crear."
+
+    # If relative, anchor to workspace
+    p = Path(clean)
+    if not p.is_absolute():
+        p = WORKSPACE_DIR / p
+
+    safe, reason = is_safe_operation_path(p)
+    if not safe:
+        return f"Status: Error - {reason}"
+
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return f"Status: Archivo '{p.name}' creado con éxito en '{p.parent}' ({len(content)} caracteres)."
+    except Exception as err:
+        return f"Status: Error al crear '{p.name}': {err}"
+
+
+def create_folder(target: str) -> str:
+    """
+    Safely creates a new folder.
+    """
+    clean = (target or "").strip()
+    if not clean:
+        return "Status: Error - No se proporcionó el nombre o ruta de la carpeta."
+
+    p = Path(clean)
+    if not p.is_absolute():
+        p = WORKSPACE_DIR / p
+
+    safe, reason = is_safe_operation_path(p)
+    if not safe:
+        return f"Status: Error - {reason}"
+
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        return f"Status: Carpeta '{p.name}' creada con éxito en '{p.parent}'."
+    except Exception as err:
+        return f"Status: Error al crear carpeta '{p.name}': {err}"
+
+
+def edit_file(
+    target: str,
+    find_text: str = "",
+    replace_text: str = "",
+    append_text: str = "",
+    content: str = "",
+    overwrite: bool = False
+) -> str:
+    """
+    Safely edits an existing file with automatic backup.
+    Supports:
+    1. Replacement of a specific text block.
+    2. Appending text to the end.
+    3. Overwriting full content if requested.
+    """
+    resolved = resolve_path(target)
+    if not resolved:
+        search = find_files(target, max_results=1)
+        if search["matches"]:
+            resolved = Path(search["matches"][0])
+
+    if not resolved or not resolved.exists():
+        return f"Status: Error - El archivo '{target}' no existe para editarlo."
+
+    if resolved.is_dir():
+        return f"Status: Error - '{resolved.name}' es una carpeta, no un archivo de texto."
+
+    safe, reason = is_safe_operation_path(resolved)
+    if not safe:
+        return f"Status: Error - {reason}"
+
+    try:
+        original = resolved.read_text(encoding="utf-8", errors="replace")
+        
+        # Create lightweight backup file (.bak)
+        bak_file = resolved.with_suffix(resolved.suffix + ".bak")
+        bak_file.write_text(original, encoding="utf-8")
+
+        new_content = original
+
+        if overwrite and content:
+            new_content = content
+        elif find_text:
+            if find_text not in original:
+                return f"Status: Advertencia - No se encontró el texto indicado para reemplazar en '{resolved.name}'."
+            new_content = original.replace(find_text, replace_text)
+        elif append_text:
+            new_content = original + ("\n" if not original.endswith("\n") else "") + append_text
+        elif content and not overwrite:
+            # Default to append if content is passed without find_text
+            new_content = original + ("\n" if not original.endswith("\n") else "") + content
+        else:
+            return "Status: Error - No se indicó qué modificar (find_text, append_text o content)."
+
+        resolved.write_text(new_content, encoding="utf-8")
+        return f"Status: Archivo '{resolved.name}' modificado correctamente (Copia de respaldo creada en '{bak_file.name}')."
+    except Exception as err:
+        return f"Status: Error al editar '{resolved.name}': {err}"
+
+
+def delete_file_safely(target: str, force: bool = False) -> str:
+    """
+    Safely moves a file or directory to Capri's safe quarantine / trash vault (~/.capri_trash),
+    allowing full reversibility and preventing accidental loss of data.
+    """
+    resolved = resolve_path(target)
+    if not resolved:
+        search = find_files(target, max_results=1)
+        if search["matches"]:
+            resolved = Path(search["matches"][0])
+
+    if not resolved or not resolved.exists():
+        return f"Status: Error - El archivo o carpeta '{target}' no existe."
+
+    safe, reason = is_safe_operation_path(resolved)
+    if not safe:
+        return f"Status: Error - {reason}"
+
+    # Do not allow deleting current working directory
+    if resolved == WORKSPACE_DIR:
+        return "Status: Operación rechazada: no puedes eliminar el directorio activo del proyecto."
+
+    try:
+        # Destination in safe quarantine
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        trash_dir = TRASH_DIR / timestamp
+        trash_dir.mkdir(parents=True, exist_ok=True)
+
+        dest = trash_dir / resolved.name
+        shutil.move(str(resolved), str(dest))
+
+        # Save metadata record for reversibility
+        manifest = {
+            "original_path": str(resolved),
+            "trash_path": str(dest),
+            "deleted_at": time.time(),
+            "kind": "dir" if dest.is_dir() else "file",
+        }
+        manifest_file = trash_dir / "manifest.json"
+        manifest_file.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+        kind_str = "Carpeta" if manifest["kind"] == "dir" else "Archivo"
+        return (
+            f"Status: {kind_str} '{resolved.name}' movido con éxito a la papelera segura de Capri.\n"
+            f"Ubicación de respaldo: {dest} (Totalmente recuperable)."
+        )
+    except Exception as err:
+        return f"Status: Error al eliminar/mover '{resolved.name}': {err}"
+

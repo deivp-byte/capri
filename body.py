@@ -48,6 +48,7 @@ from abilities.window_manager import (
 from abilities.media_sensor import get_now_playing
 from brain import SpiderBrain, CapriBrain, set_window_action_callback, set_window_perch_callback
 from bubble import SpiderBubble, CapriBubble
+from config import get_config
 
 
 # ==============================================================================
@@ -375,6 +376,7 @@ class SpiderWindow(QWidget):
 
         # Initialize Brain & Memory
         self.brain = SpiderBrain()
+        self.cfg = getattr(self.brain, "cfg", None) or get_config()
 
         # Window drag tracking state
         self._drag_pos: QPoint | None = None
@@ -414,10 +416,12 @@ class SpiderWindow(QWidget):
         self._typing_idle_timer.setSingleShot(True)
         self._typing_idle_timer.timeout.connect(self._on_typing_idle)
 
-        # 60 FPS animation loop for sprite frames
+        # Configured FPS animation loop (e.g. 30 FPS = ~33ms, saving CPU cycles when idle)
+        target_fps = self.cfg.get("desk", {}).get("fps", 30)
+        self.anim_interval_ms = max(20, int(1000 / target_fps))
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self._on_anim_tick)
-        self.anim_timer.start(16)
+        self.anim_timer.start(self.anim_interval_ms)
 
         # Autonomous Roaming & Desktop Life Engine (Calm Pacing)
         self.roaming_enabled: bool = True
@@ -1778,7 +1782,10 @@ class SpiderWindow(QWidget):
         self.bubble.reposition()
 
     def closeEvent(self, event) -> None:
-        """Ensures memory is cleanly saved, overlays closed and timers stopped."""
+        """Ensures memory is cleanly saved, overlays closed, model unloaded and timers stopped."""
+        self.anim_timer.stop()
+        if hasattr(self, "_chatter_timer"):
+            self._chatter_timer.stop()
         self._choreo_timer.stop()
         self._roam_eval_timer.stop()
         self._roam_motion_timer.stop()
@@ -1792,6 +1799,7 @@ class SpiderWindow(QWidget):
         self.web_overlay.close()
         self.bubble.close()
         self.brain.save_memory()
+        self.brain.unload_model()
         event.accept()
 
     def _cancel_active_tasks(self) -> None:

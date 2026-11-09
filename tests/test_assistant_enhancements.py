@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 """
 test_assistant_enhancements.py - Verification suite for:
 1. Deep file system navigation (open_folder, list_folder, find_files, read_file).

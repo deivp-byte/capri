@@ -289,4 +289,140 @@ def parse_file_or_folder_request(text: str) -> Optional[Dict[str, Any]]:
             if has_ext or has_explicit_term:
                 return {"action": "find_files", "query": query_file}
 
+    # 7. Create File (e.g. "crea un archivo llamado notas.txt con el texto hola mundo", "crea el archivo notas.txt")
+    m_create_file = re.match(
+        r'^(?:por favor\s+)?(?:crea|crear|nuevo)\s+(?:un\s+|el\s+|la\s+)?(?:archivo|fichero)\s+(?:llamado\s+|con\s+nombre\s+)?([a-z0-9_:\\/.-]+\.[a-z0-9]+)(?:\s+(?:con\s+el\s+texto|con\s+el\s+contenido|que\s+diga|con)\s+["\']?(.+?)["\']?)?$',
+        clean
+    )
+    if m_create_file:
+        file_name = m_create_file.group(1).strip()
+        file_content = m_create_file.group(2) or ""
+        return {"action": "create_file", "target": file_name, "content": file_content}
+
+    # 8. Create Folder (e.g. "crea la carpeta test", "crea una carpeta llamada temp")
+    m_create_folder = re.match(
+        r'^(?:por favor\s+)?(?:crea|crear|nueva)\s+(?:una\s+|la\s+|el\s+|un\s+)?(?:carpeta|directorio|folder)\s+(?:llamada\s+|llamado\s+)?([a-z0-9_:\\/.-]+)$',
+        clean
+    )
+    if m_create_folder:
+        folder_name = m_create_folder.group(1).strip()
+        return {"action": "create_folder", "target": folder_name}
+
+    # 9. Edit File (e.g. "edita el archivo notas.txt y añade...", "modifica el archivo notas.txt")
+    m_edit_file = re.match(
+        r'^(?:por favor\s+)?(?:edita|editar|modifica|modificar)\s+(?:el\s+|la\s+|un\s+|una\s+)?(?:archivo\s+|fichero\s+)?([a-z0-9_:\\/.-]+\.[a-z0-9]+)(?:\s+(?:y\s+)?(?:a[nñ]ade|agrega|ponle)\s+["\']?(.+?)["\']?)?$',
+        clean
+    )
+    if m_edit_file:
+        file_name = m_edit_file.group(1).strip()
+        append_txt = m_edit_file.group(2) or ""
+        return {"action": "edit_file", "target": file_name, "append_text": append_txt}
+
+    # 10. Safe Delete File / Folder (e.g. "elimina el archivo temp.txt", "borra la carpeta test")
+    m_delete = re.match(
+        r'^(?:por favor\s+)?(?:elimina|eliminar|borra|borrar|suprime|quita|mueve\s+a\s+la\s+papelera)\s+(?:el\s+|la\s+|un\s+|una\s+)?(?:archivo\s+|carpeta\s+|fichero\s+|directorio\s+)?([a-z0-9_:\\/.-]+(?:\.[a-z0-9]+)?)$',
+        clean
+    )
+    if m_delete:
+        target_name = m_delete.group(1).strip()
+        # Avoid false positives with system control words like 'volumen' or 'app'
+        if target_name not in ("app", "ventana", "musica", "cancion", "pantalla", "volumen"):
+            return {"action": "delete_file_safely", "target": target_name}
+
     return None
+
+
+def parse_developer_and_pattern_request(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Parses natural language requests for developer assistance, code understanding,
+    project architecture brainstorming, and adaptive pattern learning:
+      - 'analiza el proyecto capri' -> inspect_project('capri')
+      - 'inspecciona el proyecto' -> inspect_project('')
+      - 'analiza el código de brain.py' -> analyze_code('brain.py')
+      - 'qué hace persona.py' -> analyze_code('persona.py')
+      - 'dame ideas para el proyecto' -> brainstorm_project_ideas('')
+      - 'ideas de arquitectura para el proyecto' -> brainstorm_project_ideas('', query='arquitectura')
+      - 'comprueba el código' / 'pasa los tests' -> run_code_check('')
+      - 'qué patrones has aprendido' -> list_learned_patterns()
+      - 'recuerda que mi proyecto web está en C:/proyectos/web' -> learn_pattern('project', 'web', ...)
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return None
+
+    nfkd = unicodedata.normalize("NFKD", raw)
+    clean = "".join(ch for ch in nfkd if not unicodedata.combining(ch)).lower().strip(" .!?¿¡")
+
+    # 0. Check Learned Dynamic Rules first
+    from abilities.pattern_learning import get_pattern_learner
+    learner = get_pattern_learner()
+    learned_match = learner.match_learned_rule(clean)
+    if learned_match:
+        act_name, params = learned_match
+        return {"action": act_name, "params": params}
+
+    # 1. Summary of Learned Knowledge / Patterns
+    if re.match(r'^(?:por favor\s+)?(?:que\s+(?:patrones\s+)?has\s+aprendido|que\s+sabes\s+de\s+mis\s+proyectos|resumen\s+de\s+aprendizaje|muestra\s+patrones\s+aprendidos|lista\s+(?:los\s+)?patrones)$', clean):
+        return {"action": "list_learned_patterns"}
+
+    # 2. Learn Project Path / Alias (e.g. "recuerda que mi proyecto bot esta en c:/archivos/bot")
+    m_learn_proj = re.match(
+        r'^(?:por favor\s+)?(?:recuerda|aprende|guarda)\s+(?:que\s+)?(?:mi\s+)?proyecto\s+([a-z0-9_-]+)\s+(?:esta\s+en|apunta\s+a|es)\s+([a-z0-9_:\\/.-]+)$',
+        clean
+    )
+    if m_learn_proj:
+        alias = m_learn_proj.group(1).strip()
+        path = m_learn_proj.group(2).strip()
+        return {"action": "learn_pattern", "kind": "project", "name": alias, "value": path}
+
+    # 3. Learn Preference (e.g. "aprende que mi framework preferido es fastapi")
+    m_learn_pref = re.match(
+        r'^(?:por favor\s+)?(?:recuerda|aprende|guarda)\s+(?:que\s+)?(?:mi\s+)?preferencia\s+([a-z0-9_-]+)\s+(?:es|sea)\s+(.+)$',
+        clean
+    )
+    if m_learn_pref:
+        pref_key = m_learn_pref.group(1).strip()
+        pref_val = m_learn_pref.group(2).strip()
+        return {"action": "learn_pattern", "kind": "preference", "name": pref_key, "value": pref_val}
+
+    # 4. Project Inspection (e.g. "analiza el proyecto capri", "inspecciona el proyecto")
+    m_inspect = re.match(
+        r'^(?:por favor\s+)?(?:analiza|inspecciona|explora|revisa|escanea)\s+(?:el\s+)?proyecto(?:\s+([a-z0-9_-]+))?$',
+        clean
+    )
+    if m_inspect:
+        target_proj = m_inspect.group(1) or ""
+        return {"action": "inspect_project", "target": target_proj}
+
+    # 5. Code File Analysis (e.g. "analiza el código de brain.py", "explica el código de body.py", "qué hace persona.py")
+    m_code = re.match(
+        r'^(?:por favor\s+)?(?:analiza|inspecciona|revisa|explica|entiende)\s+(?:el\s+codigo\s+(?:del?\s+)?|las\s+funciones\s+de\s+|la\s+estructura\s+de\s+)?([a-z0-9_:\\/.-]+\.[a-z0-9]+)$',
+        clean
+    )
+    if m_code:
+        file_target = m_code.group(1).strip()
+        return {"action": "analyze_code", "target": file_target}
+
+    m_what_does = re.match(
+        r'^(?:por favor\s+)?(?:que\s+hace|que\s+contiene|de\s+que\s+trata)\s+(?:el\s+archivo\s+|el\s+fichero\s+|el\s+script\s+)?([a-z0-9_:\\/.-]+\.[a-z0-9]+)$',
+        clean
+    )
+    if m_what_does:
+        file_target = m_what_does.group(1).strip()
+        return {"action": "analyze_code", "target": file_target}
+
+    # 6. Brainstorm Project Ideas & Architecture
+    if re.match(r'^(?:por favor\s+)?(?:dame\s+)?ideas\s+(?:para\s+|sobre\s+)(?:el\s+)?proyecto(?:\s+([a-z0-9_-]+))?$', clean) or \
+       re.match(r'^(?:por favor\s+)?(?:sugerencias|ideas)\s+de\s+arquitectura(?:\s+(?:para|sobre)\s+(?:el\s+)?proyecto(?:\s+([a-z0-9_-]+))?)?$', clean) or \
+       clean in ("como mejorar el proyecto", "ideas para el proyecto", "sugerencias de desarrollo", "ideas de desarrollo"):
+        # Extract target project if present
+        m_proj = re.search(r'proyecto\s+([a-z0-9_-]+)', clean)
+        proj_name = m_proj.group(1) if m_proj else ""
+        return {"action": "brainstorm_project_ideas", "target": proj_name}
+
+    # 7. Run Code Checks / Tests
+    if re.match(r'^(?:por favor\s+)?(?:comprueba\s+el\s+codigo|pasa\s+los\s+tests|ejecuta\s+(?:las\s+)?pruebas|verifica\s+la\s+sintaxis|testea\s+el\s+codigo|haz\s+test)$', clean):
+        return {"action": "run_code_check", "target": ""}
+
+    return None
+
